@@ -1,0 +1,8 @@
+{
+    "mcpServers": {
+        "fanta-asta": {
+            "type": "http",
+            "url": "https://fanta-asta.test/mcp"
+        }
+    }
+}
