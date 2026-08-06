@@ -190,6 +190,14 @@ it('avvia e chiude l\'asta, e non ne lascia mai due in corso', function () {
     expect(Auction::live())->toBeNull();
 });
 
+it('invita ad aprire una sessione d\'asta quando non ce n\'è nessuna', function () {
+    Auction::query()->delete();
+
+    Livewire::test(Room::class)
+        ->assertSee('Nessuna sessione d\'asta aperta', false)
+        ->assertSee('dashboard');
+});
+
 it('il polling non ridisegna la sala se non è cambiato niente', function () {
     $componente = Livewire::test(Room::class);
     $impronta = $componente->get('stateHash');

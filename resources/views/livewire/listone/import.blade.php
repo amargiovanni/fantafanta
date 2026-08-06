@@ -14,6 +14,15 @@
         </div>
     @endif
 
+    @if ($playersCount === 0 && $headers === [] && ! $summary)
+        <div class="rounded-lg border border-dashed border-slate-300 bg-white px-4 py-6 text-center dark:border-slate-700 dark:bg-slate-900">
+            <p class="text-sm font-medium text-slate-700 dark:text-slate-300">Il listone è ancora vuoto.</p>
+            <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                Scegli il CSV "Quotazioni" esportato da fantacalcio.it qui sotto: dopo la scelta comparirà l'anteprima delle colonne da confermare.
+            </p>
+        </div>
+    @endif
+
     <div class="rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
         <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">File CSV</label>
         <input type="file" wire:model="file" accept=".csv,.txt" class="mt-2 block w-full text-sm dark:text-slate-300">

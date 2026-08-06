@@ -3,6 +3,7 @@
 namespace App\Livewire\Listone;
 
 use App\Enums\PlayerRole;
+use App\Models\Player;
 use App\Services\ListoneImporter;
 use Illuminate\Contracts\View\View;
 use Livewire\Component;
@@ -86,6 +87,7 @@ class Import extends Component
     {
         return view('livewire.listone.import', [
             'roles' => PlayerRole::cases(),
+            'playersCount' => Player::query()->count(),
         ]);
     }
 }

@@ -169,7 +169,9 @@
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="6" class="px-4 py-10 text-center text-slate-500 dark:text-slate-400">Nessuna testata configurata.</td>
+                        <td colspan="6" class="px-4 py-10 text-center text-slate-500 dark:text-slate-400">
+                            Nessuna testata configurata. Aggiungine una dal modulo qui sopra.
+                        </td>
                     </tr>
                 @endforelse
             </tbody>

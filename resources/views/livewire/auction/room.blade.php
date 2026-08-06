@@ -126,6 +126,18 @@
         </div>
     </div>
 
+    {{-- ── Empty state: nessuna sessione d'asta aperta ── --}}
+    @unless ($auction)
+        <div class="rounded-lg border border-dashed border-slate-300 bg-white px-4 py-8 text-center dark:border-slate-700 dark:bg-slate-900">
+            <p class="text-sm font-medium text-slate-700 dark:text-slate-300">
+                Nessuna sessione d'asta aperta.
+            </p>
+            <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                Aprine una dalla <a href="{{ route('dashboard') }}" class="font-medium text-slate-900 underline hover:no-underline dark:text-slate-100">dashboard</a> per iniziare a registrare acquisti qui.
+            </p>
+        </div>
+    @endunless
+
     {{-- ── Barra mia squadra: budget, reparti, slot riempiti ── --}}
     @php
         $slotsPerRole = $state->slots();
