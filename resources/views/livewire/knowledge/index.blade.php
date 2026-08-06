@@ -1,4 +1,6 @@
-<div class="space-y-6" wire:poll.5s>
+<div class="space-y-6">
+    <div wire:poll.5s="syncState" class="hidden"></div>
+
     <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
             <h1 class="text-2xl font-semibold text-slate-900">Conoscenza</h1>
