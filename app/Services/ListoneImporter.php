@@ -217,9 +217,10 @@ class ListoneImporter
         rewind($stream);
 
         // Riga 1: intestazione generica di fantacalcio.it (titolo/versione), sempre scartata.
-        fgetcsv($stream);
+        // $escape esplicito (stringa vuota): ometterlo è deprecato da PHP 8.4.
+        fgetcsv($stream, null, ',', '"', '');
 
-        $headers = fgetcsv($stream);
+        $headers = fgetcsv($stream, null, ',', '"', '');
         if ($headers === false) {
             fclose($stream);
 
@@ -228,7 +229,7 @@ class ListoneImporter
         $headers = array_map(fn ($header) => trim((string) $header), $headers);
 
         $rows = [];
-        while (($line = fgetcsv($stream)) !== false) {
+        while (($line = fgetcsv($stream, null, ',', '"', '')) !== false) {
             if ($line === [null]) {
                 continue;
             }
