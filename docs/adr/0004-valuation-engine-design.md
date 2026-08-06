@@ -166,10 +166,15 @@ un `max_bid` mostrato in asta diverso da quello validato in `save_plan`.
   non accoda il ricalcolo produce numeri fermi a ieri, che è il modo peggiore
   di sbagliare perché sembrano aggiornati. Gli observer coprono i casi noti; i
   percorsi che scrivono con `update()` di massa li aggirano per costruzione.
-- Una raffica di segnali accoda un job per segnale. Sono job da frazioni di
-  secondo e idempotenti, quindi il costo è tollerato, ma con l'ingestione
-  automatica della Fase 4 andrà messo un debounce (o `ShouldBeUnique`) come
-  quello già previsto per il replan.
+- ~~Una raffica di segnali accoda un job per segnale...~~ **Chiuso in Fase 5**:
+  `RecomputeValuations` porta `#[DebounceFor(debounceFor: 5, maxWait: 30)]`,
+  il debounce nativo delle code (stesso principio marker+delay del replan).
+  Un dispatch per evento resta visibile in coda, ma solo l'ultimo di una
+  raffica esegue davvero `handle()`; i precedenti vengono scartati
+  all'esecuzione. `debounceFor` è configurabile
+  (`fanta.recompute_valuations.debounce`); `maxWait` è un letterale
+  nell'attributo perché gli argomenti di un attributo PHP devono essere
+  costanti a tempo di compilazione, non possono chiamare `config()`.
 - `config/valuation.php` diventa parte del contratto: cambiarne un valore
   cambia il comportamento del motore, e va trattato come una modifica di codice
   (commit, motivazione, test rieseguiti).
@@ -177,6 +182,22 @@ un `max_bid` mostrato in asta diverso da quello validato in `save_plan`.
   importato senza statistiche funziona — la quotazione fa da proxy — ma perde
   il modificatore di difesa e il fairplay, che sono buona parte del vantaggio
   in questa lega.
+- **`get_available_players` (tool MCP, `App\Mcp\Tools\GetAvailablePlayersTool`)
+  fa `groupBy('players.id')` selezionando anche colonne di `valuations` unite
+  con `leftJoin`.** Su SQLite (l'unico motore usato da questo progetto, §5.5
+  sopra) è permissivo e la query è corretta. Sotto MySQL con
+  `ONLY_FULL_GROUP_BY` attivo (default da 5.7) il comportamento non è
+  garantito allo stesso modo per colonne di una tabella joinata: MySQL
+  riconosce la dipendenza funzionale da una chiave univoca NOT NULL della
+  stessa tabella raggruppata, ma l'analisi attraverso un `leftJoin` è più
+  fragile (`valuations.player_id` è unico, ma la join è left e può restituire
+  righe nulle) e in certe versioni la query fallirebbe con
+  `ER_WRONG_FIELD_WITH_GROUP` invece di essere semplicemente permissiva come
+  su SQLite. **Nota di sola documentazione**: il progetto gira solo su
+  SQLite (briefing §3), quindi non è un difetto da correggere ora — se un
+  giorno si porta il progetto su MySQL, questa query va riscritta (es.
+  `GROUP BY` su tutte le colonne selezionate non aggregate, o sostituendo il
+  `groupBy` con una subquery/window function) prima di fidarsi del risultato.
 
 ## Riferimenti
 

@@ -132,3 +132,20 @@ it('conta le fonti per stato della pipeline', function () {
             'in_coda' => 1, 'processate' => 1, 'da_rivedere' => 1, 'in_errore' => 1,
         ]);
 });
+
+it('il polling non ridisegna la lista se non è cambiato niente', function () {
+    Source::factory()->create();
+
+    $componente = Livewire::test(Index::class);
+    $impronta = $componente->get('stateHash');
+
+    $componente->call('syncState')->assertSet('stateHash', $impronta);
+
+    // Una nuova fonte cambia lo stato: al giro dopo l'impronta è diversa e
+    // il componente si ridisegna.
+    Source::factory()->create();
+
+    $componente->call('syncState');
+
+    expect($componente->get('stateHash'))->not->toBe($impronta);
+});

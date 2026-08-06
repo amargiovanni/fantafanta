@@ -37,6 +37,43 @@ class Index extends Component
 
     public ?int $expandedSource = null;
 
+    /**
+     * Impronta dello stato per il poll leggero — stesso pattern della sala
+     * d'asta (`Room::syncState`): un conteggio aggregato, nessuna riga
+     * caricata. `Source::update()` accompagna sempre ogni transizione di
+     * stato rilevante (coda, elaborazione, errore, revisione), quindi conta
+     * e `max(updated_at)` bastano a intercettare qualunque cambiamento senza
+     * ricaricare la pagina paginata + le signal ogni 5 secondi a vuoto.
+     */
+    public string $stateHash = '';
+
+    public function mount(): void
+    {
+        $this->stateHash = $this->currentStateHash();
+    }
+
+    public function syncState(): void
+    {
+        $hash = $this->currentStateHash();
+
+        if ($hash === $this->stateHash) {
+            $this->skipRender();
+
+            return;
+        }
+
+        $this->stateHash = $hash;
+    }
+
+    private function currentStateHash(): string
+    {
+        $row = Source::query()
+            ->selectRaw('count(*) as n, max(id) as max_id, max(updated_at) as t')
+            ->first();
+
+        return md5(implode('|', [$row?->n, $row?->max_id, $row?->t]));
+    }
+
     public function submit(): void
     {
         $this->validate([

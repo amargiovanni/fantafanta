@@ -3,7 +3,35 @@
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
 
+/*
+ * Dark mode a `data-theme`, non a `prefers-color-scheme` (ADR 0007): un
+ * toggle manuale persistito deve poter scavalcare la preferenza di sistema,
+ * cosa che la variante `dark:` di default di Tailwind non permette. Lo
+ * script bloccante in `layouts/app.blade.php` scrive l'attributo prima di
+ * ogni paint; qui si insegna a `dark:` a leggerlo.
+ */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
 @theme {
     --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
+}
+
+/*
+ * La stampa del piano deve leggersi anche con il tema scuro attivo. I
+ * browser di norma non stampano gli sfondi (l'opzione "Grafica di sfondo" è
+ * spenta per default), ma STAMPANO il colore del testo: con `data-theme`
+ * scuro, `dark:text-slate-100` finirebbe bianco su una pagina bianca. Questo
+ * blocco forza l'aspetto chiaro in stampa a prescindere dal tema scelto,
+ * indipendentemente dall'ordine di generazione delle utility `dark:`.
+ */
+@media print {
+    :root, [data-theme='dark'] {
+        color-scheme: light;
+    }
+
+    body {
+        background-color: #fff !important;
+        color: #0f172a !important;
+    }
 }

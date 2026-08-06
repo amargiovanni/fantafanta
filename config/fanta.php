@@ -50,6 +50,27 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Ricalcolo valutazioni (ADR 0004)
+    |--------------------------------------------------------------------------
+    |
+    | Una raffica di segnali (ingestione automatica, Fase 4) accodava un
+    | RecomputeValuations per evento: job economici e idempotenti, ma inutili
+    | da ripetere tre volte in due secondi per lo stesso listone. `debounce`
+    | usa il debounce nativo delle code di Laravel (`#[DebounceFor]`, stesso
+    | principio marker+delay del replan): l'ultimo dispatch di una raffica
+    | vince, i precedenti vengono scartati silenziosamente all'esecuzione.
+    | `max_wait` è la stessa rete di sicurezza del replan: oltre questa soglia
+    | il job parte comunque anche se la raffica non si è fermata.
+    |
+    */
+
+    'recompute_valuations' => [
+        'debounce' => (int) env('FANTA_RECOMPUTE_DEBOUNCE', 5),
+        'max_wait' => (int) env('FANTA_RECOMPUTE_MAX_WAIT', 30),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Server MCP
     |--------------------------------------------------------------------------
     |

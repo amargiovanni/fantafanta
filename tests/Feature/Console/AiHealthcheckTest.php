@@ -4,6 +4,7 @@ use App\Mcp\Servers\FantaAstaServer;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Process;
+use Laravel\Horizon\Contracts\MasterSupervisorRepository;
 
 /**
  * Il server MCP sano espone esattamente i tool che dichiara: l'healthcheck
@@ -16,6 +17,47 @@ function toolEsposti(): array
     return array_fill(0, FantaAstaServer::declaredToolCount(), ['name' => 'un_tool']);
 }
 
+/**
+ * Horizon non ha una faccia in `Illuminate\Support\Facades`: il modo pulito
+ * di simularlo nei test è sostituire il repository che i master supervisor
+ * usano per registrarsi, con l'esito che serve al caso.
+ *
+ * @param  array<int, object>  $masters
+ */
+function fakeHorizon(array $masters): void
+{
+    app()->instance(MasterSupervisorRepository::class, new class($masters) implements MasterSupervisorRepository
+    {
+        public function __construct(private array $masters) {}
+
+        public function names()
+        {
+            return array_map(fn ($m) => $m->name, $this->masters);
+        }
+
+        public function all()
+        {
+            return $this->masters;
+        }
+
+        public function find($name)
+        {
+            return null;
+        }
+
+        public function get(array $names)
+        {
+            return $this->masters;
+        }
+
+        public function update($master): void {}
+
+        public function forget($name): void {}
+
+        public function flushExpired(): void {}
+    });
+}
+
 function fakeServiziSani(): void
 {
     Process::fake(['*claude*' => Process::result(output: '2.1.220 (Claude Code)')]);
@@ -24,6 +66,8 @@ function fakeServiziSani(): void
         '*/health' => Http::response(['status' => 'available']),
         '*/mcp' => Http::response(['jsonrpc' => '2.0', 'id' => 1, 'result' => ['tools' => toolEsposti()]]),
     ]);
+
+    fakeHorizon([(object) ['name' => 'horizon-test', 'status' => 'running']]);
 }
 
 it('riporta OK e esce con codice 0 quando tutto risponde', function () {
@@ -33,10 +77,30 @@ it('riporta OK e esce con codice 0 quando tutto risponde', function () {
         // Una sola attesa per riga di output: ogni riga viene consumata dalla
         // prima attesa che la soddisfa.
         ->expectsOutputToContain('Claude Code CLI')
+        ->expectsOutputToContain('Horizon')
         ->expectsOutputToContain('Meilisearch')
         ->expectsOutputToContain('Server MCP')
         ->expectsOutputToContain('Tutti i servizi rispondono')
         ->assertExitCode(0);
+});
+
+it('esce con codice 1 se Horizon non ha nessun master supervisor attivo', function () {
+    fakeServiziSani();
+    fakeHorizon([]);
+
+    $this->artisan('ai:healthcheck')
+        ->expectsOutputToContain('nessun master supervisor attivo')
+        ->expectsOutputToContain('Almeno un servizio non risponde')
+        ->assertExitCode(1);
+});
+
+it('esce con codice 1 se Horizon è in pausa', function () {
+    fakeServiziSani();
+    fakeHorizon([(object) ['name' => 'horizon-test', 'status' => 'paused']]);
+
+    $this->artisan('ai:healthcheck')
+        ->expectsOutputToContain('in pausa')
+        ->assertExitCode(1);
 });
 
 it('esce con codice 1 se il binario claude non risponde', function () {

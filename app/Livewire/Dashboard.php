@@ -4,6 +4,7 @@ namespace App\Livewire;
 
 use App\Enums\AuctionStatus;
 use App\Enums\PlanStatus;
+use App\Enums\PlanTrigger;
 use App\Jobs\RecomputeValuations;
 use App\Jobs\RunClaudeTask;
 use App\Models\Auction;
@@ -66,6 +67,12 @@ class Dashboard extends Component
      * Mette in coda la generazione del piano. È l'unico punto della UI da cui
      * parte un run di Claude, e non blocca la richiesta: il piano comparirà
      * quando il job avrà finito.
+     *
+     * Crea subito la riga `plans` in stato `generating`, esattamente come fa
+     * `Replanner::launch()` per il replan: senza, il badge "generazione in
+     * corso" non ha nulla da guardare finché il primo piano non esiste ancora,
+     * e un doppio click in quella finestra metterebbe in coda due run che
+     * scriverebbero due volte la versione 1.
      */
     public function generatePlan(): void
     {
@@ -83,10 +90,23 @@ class Dashboard extends Component
             return;
         }
 
+        if ($auction->plans()->where('status', PlanStatus::Generating)->exists()) {
+            session()->flash('dashboard-error', 'C\'è già una generazione in corso: aspetta che finisca.');
+
+            return;
+        }
+
+        $plan = Plan::query()->create([
+            'auction_id' => $auction->id,
+            'version' => (int) Plan::query()->where('auction_id', $auction->id)->max('version') + 1,
+            'trigger' => PlanTrigger::Initial,
+            'status' => PlanStatus::Generating,
+        ]);
+
         RunClaudeTask::dispatch(
             task: 'generate-plan',
             promptFile: 'generate-plan.md',
-            context: ['auction_id' => $auction->id],
+            context: ['auction_id' => $auction->id, 'plan_id' => $plan->id],
             variables: [
                 'today' => now()->toDateString(),
                 'auction_id' => $auction->id,
