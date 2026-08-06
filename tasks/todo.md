@@ -5,14 +5,14 @@ Regola: la fase N+1 non parte con acceptance della N aperti. Ogni fase chiude co
 `php artisan test` verde e `vendor/bin/pint --test` pulito, eseguiti dal PO.
 
 ## Fase 0 — Fondamenta
-- [ ] Scaffold Laravel 12 (Herd, `fanta-asta.test`, SQLite), Pest 4, Pint, strict mode Eloquent in dev
-- [ ] Horizon + Redis (code: default, ai, ai-replan, scraping), Scout + Meilisearch
-- [ ] Migration + model: players, player_aliases, league_config, teams (tutte reversibili, rollback verificato)
-- [ ] Import CSV listone fantacalcio.it: mapping colonne con anteprima, normalizzazione nomi, alias automatici, re-import idempotente su alias/segnali
-- [ ] Ricerca fuzzy player (Scout/Meilisearch + alias): "lautaro" / "Martinez L." / "martinez lautaro" → stesso player
-- [ ] Setup lega (league_config singleton) + CRUD squadre
-- [ ] ADR: 0001 stack e deviazioni dal briefing (D1–D4), 0002 due velocità
-- [ ] Gate: acceptance Fase 0 del briefing §9 + test Pest su import/normalizzazione
+- [x] Scaffold Laravel 12 (Herd, `fanta-asta.test`, SQLite), Pest 4, Pint, strict mode Eloquent in dev
+- [x] Horizon + Redis (code: default, ai, ai-replan, scraping), Scout + Meilisearch
+- [x] Migration + model: players, player_aliases, league_config, teams (tutte reversibili, rollback verificato)
+- [x] Import CSV listone fantacalcio.it: mapping colonne con anteprima, normalizzazione nomi, alias automatici, re-import idempotente su alias/segnali
+- [x] Ricerca fuzzy player (Scout/Meilisearch + alias): "lautaro" / "Martinez L." / "martinez lautaro" → stesso player
+- [x] Setup lega (league_config singleton) + CRUD squadre
+- [x] ADR: 0001 stack e deviazioni dal briefing (D1–D4), 0002 due velocità
+- [x] Gate: acceptance Fase 0 del briefing §9 + test Pest su import/normalizzazione
 
 ## Fase 1 — Conoscenza
 - [ ] Migration + model: sources, signals, ai_runs, scrape_targets (seed testate)

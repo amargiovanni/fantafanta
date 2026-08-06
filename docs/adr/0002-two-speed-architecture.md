@@ -1,6 +1,6 @@
 # 0002. Architettura a due velocità: livello deterministico vs livello strategico
 
-**Status**: Proposed
+**Status**: Accepted
 **Date**: 2026-08-06
 **Deciders**: [da confermare — Claude come estensore, Andrea (PO) come decisore]
 

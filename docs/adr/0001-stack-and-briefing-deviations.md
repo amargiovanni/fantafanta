@@ -1,6 +1,6 @@
 # 0001. Stack di progetto e deviazioni dal briefing
 
-**Status**: Proposed
+**Status**: Accepted
 **Date**: 2026-08-06
 **Deciders**: [da confermare — Claude come estensore, Andrea (PO) come decisore]
 
