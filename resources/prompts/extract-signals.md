@@ -69,6 +69,7 @@ Metti in `payload` i dettagli utili che il tipo non esprime, per esempio `{"stop
    - **Esito `matched`** → usa quel `player_id`.
    - **Esito `ambiguous` o `not_found`** → NON scegliere a intuito. Il segnale va scritto con `player_id` assente, `needs_review: true` e `raw_name` uguale al nome esatto trovato nel testo. Lo assegnerà una persona dal backoffice.
    - Attenzione agli omonimi: in Serie A convivono più giocatori con lo stesso cognome. Se il testo dà la squadra, passala nel campo `context` di `resolve_player_name`.
+   - Il contrario però vale altrettanto: **se il testo dà nome e cognome e `resolve_player_name` risponde `matched`, fidati di quella risposta**. Il server ha già confrontato il nome con tutte le forme note e ha già verificato che il secondo candidato sia abbastanza distante. Vedere un omonimo fra i risultati di `search_player` non è un motivo per declassare a revisione un nome che il server ha risolto: "Marcus Thuram" è identificato anche se in listone esiste un altro Thuram.
 
    > Un segnale attribuito al giocatore sbagliato è l'errore più costoso che puoi fare qui: falsa una valutazione senza che nessuno se ne accorga. Un segnale in revisione, invece, è visibile e si corregge in dieci secondi. Nel dubbio, sempre revisione.
 
