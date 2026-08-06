@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\AuctionStatus;
+use App\Enums\PlanStatus;
 use App\Enums\PlayerRole;
 use App\Enums\SignalType;
 use App\Jobs\RecomputeValuations;
@@ -105,9 +106,14 @@ it('mette in coda la generazione del piano sulla coda ai, senza chiamare l\'AI a
         ->call('generatePlan')
         ->assertSee('Generazione del piano avviata');
 
+    $plan = Plan::query()->where('auction_id', $auction->id)->sole();
+
+    expect($plan->status)->toBe(PlanStatus::Generating)
+        ->and($plan->version)->toBe(1);
+
     Queue::assertPushed(RunClaudeTask::class, fn (RunClaudeTask $job) => $job->task === 'generate-plan'
         && $job->promptFile === 'generate-plan.md'
-        && $job->context === ['auction_id' => $auction->id]
+        && $job->context === ['auction_id' => $auction->id, 'plan_id' => $plan->id]
         && $job->queue === 'ai');
 });
 
@@ -125,6 +131,24 @@ it('rifiuta di generare un piano senza asta o senza listone', function () {
         ->assertSee('Il listone è vuoto');
 
     Queue::assertNotPushed(RunClaudeTask::class);
+});
+
+it('rifiuta un secondo generatePlan mentre il primo è ancora in generazione', function () {
+    Queue::fake();
+
+    configuraLega();
+    registraSquadre();
+    $auction = Auction::factory()->create();
+    giocatore(PlayerRole::Attaccante);
+
+    Livewire::test(Dashboard::class)->call('generatePlan');
+
+    Livewire::test(Dashboard::class)
+        ->call('generatePlan')
+        ->assertSee('C\'è già una generazione in corso');
+
+    Queue::assertPushed(RunClaudeTask::class, 1);
+    expect(Plan::query()->where('auction_id', $auction->id)->count())->toBe(1);
 });
 
 it('mette in coda il ricalcolo delle valutazioni', function () {
