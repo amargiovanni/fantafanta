@@ -1,6 +1,6 @@
 # 0006. Architettura dello scraping automatico: parser isolati, circuit breaker, tetto di spesa
 
-**Status**: Proposed
+**Status**: Accepted
 **Date**: 2026-08-07
 **Deciders**: [da confermare — Claude come estensore, Andrea (PO) come decisore]
 
