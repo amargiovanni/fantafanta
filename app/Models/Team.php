@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -45,14 +46,27 @@ class Team extends Model
     }
 
     /**
-     * Crediti spesi finora. In Fase 0 non esistono ancora acquisizioni:
-     * derivato sempre a 0 fino a quando App\Models\Acquisition arriverà in
-     * Fase 2, quando questo accessor sommerà i prezzi pagati.
+     * @return HasMany<Acquisition, $this>
+     */
+    public function acquisitions(): HasMany
+    {
+        return $this->hasMany(Acquisition::class);
+    }
+
+    /**
+     * Crediti spesi finora: la somma dei prezzi pagati, esclusi gli acquisti
+     * annullati (soft delete).
+     *
+     * Quando la relazione è già caricata la usa, altrimenti fa una query
+     * esplicita: lo strict mode di Eloquent vieta il lazy loading, e questo
+     * accessor viene letto anche dentro cicli sulle squadre.
      */
     protected function creditsSpent(): Attribute
     {
         return Attribute::make(
-            get: fn () => 0,
+            get: fn (): int => $this->relationLoaded('acquisitions')
+                ? (int) $this->acquisitions->sum('price')
+                : (int) Acquisition::query()->where('team_id', $this->getKey())->sum('price'),
         );
     }
 

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Mcp\Servers\FantaAstaServer;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Redis;
@@ -106,9 +107,22 @@ class SystemHealth
 
             $tools = $response->json('result.tools');
 
-            return is_array($tools) && $tools !== []
+            if (! is_array($tools) || $tools === []) {
+                return $this->ko('mcp', 'Server MCP fanta-asta', 'nessun tool nella risposta di '.$url);
+            }
+
+            $declared = FantaAstaServer::declaredToolCount();
+
+            // Un tool che non arriva all'altro capo non lo scopre nessuno
+            // finché un run headless non fallisce a metà: meglio adesso.
+            return count($tools) === $declared
                 ? $this->ok('mcp', 'Server MCP fanta-asta', count($tools).' tool esposti')
-                : $this->ko('mcp', 'Server MCP fanta-asta', 'nessun tool nella risposta di '.$url);
+                : $this->ko('mcp', 'Server MCP fanta-asta', sprintf(
+                    '%d tool esposti ma %d dichiarati dal server: qualche registrazione non è arrivata (%s)',
+                    count($tools),
+                    $declared,
+                    $url,
+                ));
         } catch (Throwable $exception) {
             return $this->ko('mcp', 'Server MCP fanta-asta', $exception->getMessage()." (url: {$url})");
         }

@@ -1,12 +1,21 @@
 <?php
 
+use App\Enums\AuctionStatus;
+use App\Enums\PlayerRole;
+use App\Enums\SignalType;
+use App\Jobs\RecomputeValuations;
+use App\Jobs\RunClaudeTask;
 use App\Livewire\Dashboard;
+use App\Models\Auction;
+use App\Models\Plan;
 use App\Models\Player;
 use App\Models\Signal;
 use App\Models\Team;
+use App\Services\PlanWriter;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Process;
+use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
 
 /**
@@ -39,7 +48,7 @@ it('shows counts of players and teams', function () {
 
 it('mostra lo stato dei servizi', function () {
     Livewire::test(Dashboard::class)
-        ->assertSee('Stato dei servizi')
+        ->assertSee('Salute della pipeline')
         ->assertSee('Claude Code CLI')
         ->assertSee('2.1.220 (Claude Code)')
         ->assertSee('Server MCP fanta-asta');
@@ -60,4 +69,124 @@ it('mostra i contatori della pipeline di conoscenza', function () {
         ->assertViewHas('signalsCount', 3)
         ->assertViewHas('signalsToReview', 1)
         ->assertSee('Segnali attivi');
+});
+
+it('spiega cosa fare quando non c\'è ancora nessun piano', function () {
+    Livewire::test(Dashboard::class)
+        ->assertSee('Nessuna sessione')
+        ->assertSee('Aprine una per poter generare il piano')
+        ->assertSee('Apri sessione');
+});
+
+it('apre la sessione d\'asta e da lì offre di generare il piano', function () {
+    Livewire::test(Dashboard::class)
+        ->call('openAuction')
+        ->assertSee('Genera piano');
+
+    expect(Auction::query()->count())->toBe(1)
+        ->and(Auction::current()->status)->toBe(AuctionStatus::Setup);
+});
+
+it('non apre due sessioni d\'asta', function () {
+    Livewire::test(Dashboard::class)->call('openAuction')->call('openAuction');
+
+    expect(Auction::query()->count())->toBe(1);
+});
+
+it('mette in coda la generazione del piano sulla coda ai, senza chiamare l\'AI adesso', function () {
+    Queue::fake();
+
+    configuraLega();
+    registraSquadre();
+    $auction = Auction::factory()->create();
+    giocatore(PlayerRole::Attaccante);
+
+    Livewire::test(Dashboard::class)
+        ->call('generatePlan')
+        ->assertSee('Generazione del piano avviata');
+
+    Queue::assertPushed(RunClaudeTask::class, fn (RunClaudeTask $job) => $job->task === 'generate-plan'
+        && $job->promptFile === 'generate-plan.md'
+        && $job->context === ['auction_id' => $auction->id]
+        && $job->queue === 'ai');
+});
+
+it('rifiuta di generare un piano senza asta o senza listone', function () {
+    Queue::fake();
+
+    Livewire::test(Dashboard::class)
+        ->call('generatePlan')
+        ->assertSee('Apri prima la sessione d\'asta');
+
+    Auction::factory()->create();
+
+    Livewire::test(Dashboard::class)
+        ->call('generatePlan')
+        ->assertSee('Il listone è vuoto');
+
+    Queue::assertNotPushed(RunClaudeTask::class);
+});
+
+it('mette in coda il ricalcolo delle valutazioni', function () {
+    Queue::fake();
+
+    Livewire::test(Dashboard::class)
+        ->call('recomputeValuations')
+        ->assertSee('Ricalcolo delle valutazioni in coda');
+
+    Queue::assertPushed(RecomputeValuations::class);
+});
+
+it('mostra il piano corrente per reparto, con alternative, note e versione', function () {
+    Queue::fake();
+
+    configuraLega();
+    registraSquadre();
+    $auction = Auction::factory()->create();
+    $listone = listonePerPiano();
+
+    app(PlanWriter::class)->save($auction, pianoValido($listone), 'Difesa concentrata sull\'Inter.');
+
+    Livewire::test(Dashboard::class)
+        ->assertSee('versione 1')
+        ->assertSee('Difesa concentrata sull\'Inter.')
+        ->assertSee('Portieri')
+        ->assertSee('Difensori')
+        ->assertSee('Centrocampisti')
+        ->assertSee('Attaccanti')
+        ->assertSee($listone['A'][0]->name)
+        ->assertSee('Da prendere');
+});
+
+it('segnala quando una versione più recente del piano è in elaborazione', function () {
+    Queue::fake();
+
+    configuraLega();
+    registraSquadre();
+    $auction = Auction::factory()->create();
+    $listone = listonePerPiano();
+
+    app(PlanWriter::class)->save($auction, pianoValido($listone), 'Prima versione.');
+
+    Plan::factory()->generating()->create(['auction_id' => $auction->id, 'version' => 2]);
+
+    Livewire::test(Dashboard::class)->assertSee('ricalcolo in corso');
+});
+
+it('mostra i segnali recenti con il loro impatto', function () {
+    Queue::fake();
+
+    $player = giocatore(PlayerRole::Attaccante, nome: 'Bomber Uno');
+
+    Signal::factory()->create([
+        'player_id' => $player->id,
+        'type' => SignalType::Rigorista,
+        'impact' => 2,
+        'confidence' => 0.9,
+    ]);
+
+    Livewire::test(Dashboard::class)
+        ->assertSee('Segnali recenti')
+        ->assertSee('Bomber Uno')
+        ->assertSee('Rigorista');
 });

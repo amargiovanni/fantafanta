@@ -15,12 +15,21 @@ class PlayerFactory extends Factory
     protected $model = Player::class;
 
     /**
+     * Progressivo che rende il nome unico per costruzione.
+     *
+     * `fake()->unique()` non basta: il vocabolario dei cognomi si esaurisce
+     * intorno al mezzo migliaio, e un listone di Serie A ne ha 600. Il nome
+     * resta comunque un nome, con un ordinale in coda.
+     */
+    private static int $ordinal = 0;
+
+    /**
      * @return array<string, mixed>
      */
     public function definition(): array
     {
         return [
-            'name' => fake()->unique()->lastName().' '.fake()->firstName(),
+            'name' => fake()->lastName().' '.fake()->firstName().' '.++self::$ordinal,
             'role' => fake()->randomElement(PlayerRole::cases()),
             'real_team' => fake()->city(),
             'quotazione' => fake()->numberBetween(1, 60),

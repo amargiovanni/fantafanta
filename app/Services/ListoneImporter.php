@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Enums\PlayerRole;
 use App\Enums\PlayerStatus;
+use App\Jobs\RecomputeValuations;
 use App\Models\Player;
 use App\Models\PlayerAlias;
 use App\Support\FantacalcioNameParser;
@@ -153,6 +154,11 @@ class ListoneImporter
                 ->where('status', '!=', PlayerStatus::Removed->value)
                 ->update(['status' => PlayerStatus::Removed->value]);
         });
+
+        // Il listone è cambiato: quotazioni, FVM e statistiche sono gli input
+        // del motore di valutazione (briefing §5), quindi tutte le valutazioni
+        // esistenti sono da riscrivere.
+        RecomputeValuations::dispatch();
 
         return $summary;
     }

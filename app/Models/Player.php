@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Laravel\Scout\Searchable;
 
 /**
@@ -67,6 +68,24 @@ class Player extends Model
     public function signals(): HasMany
     {
         return $this->hasMany(Signal::class);
+    }
+
+    /**
+     * Valutazione corrente prodotta dal ValuationEngine (briefing §5).
+     *
+     * @return HasOne<Valuation, $this>
+     */
+    public function valuation(): HasOne
+    {
+        return $this->hasOne(Valuation::class);
+    }
+
+    /**
+     * @return HasMany<Acquisition, $this>
+     */
+    public function acquisitions(): HasMany
+    {
+        return $this->hasMany(Acquisition::class);
     }
 
     public function searchableAs(): string
