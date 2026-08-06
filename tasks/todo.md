@@ -47,7 +47,7 @@ Regola: la fase N+1 non parte con acceptance della N aperti. Ogni fase chiude co
 - [x] Gate: acceptance Fase 4 §9
 
 ## Fase 5 — Rifinitura
-- [ ] Dark mode, stampa piano, empty states, performance pass sala d'asta
-- [ ] Simulatore d'asta (estrazioni random + acquisti finti) per collaudo replan sotto carico
-- [ ] README operativo (avvio servizi, healthcheck pre-asta)
-- [ ] Gate: acceptance Fase 5 + collaudo end-to-end con simulatore
+- [x] Dark mode, stampa piano, empty states, performance pass sala d'asta
+- [x] Simulatore d'asta (estrazioni random + acquisti finti) per collaudo replan sotto carico
+- [x] README operativo (avvio servizi, healthcheck pre-asta)
+- [x] Gate: acceptance Fase 5 + collaudo end-to-end con simulatore
