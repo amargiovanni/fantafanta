@@ -21,6 +21,11 @@ return new class extends Migration
             $table->string('type');
             $table->string('title');
             $table->string('url')->nullable();
+
+            // Percorso del file caricato (PDF/doc) sul disco locale: serve a
+            // ripetere l'estrazione senza chiedere di ricaricare il file.
+            $table->string('file_path')->nullable();
+
             $table->longText('raw_content')->nullable();
 
             // Hash del testo estratto: unico, è il confine anti-duplicati.

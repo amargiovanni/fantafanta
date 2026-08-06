@@ -19,6 +19,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'type',
     'title',
     'url',
+    'file_path',
     'raw_content',
     'content_hash',
     'origin',

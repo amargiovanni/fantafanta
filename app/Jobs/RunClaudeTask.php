@@ -3,7 +3,9 @@
 namespace App\Jobs;
 
 use App\Enums\AiRunStatus;
+use App\Enums\SourceStatus;
 use App\Models\AiRun;
+use App\Models\Source;
 use App\Support\PromptComposer;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -104,6 +106,33 @@ class RunClaudeTask implements ShouldQueue
             'status' => AiRunStatus::Succeeded,
             'duration_ms' => $duration,
             'output_raw' => $output,
+        ]);
+    }
+
+    /**
+     * Esauriti i tentativi, l'errore deve essere visibile dove l'utente guarda.
+     *
+     * Quando il run riguardava una source, la si marca come fallita: senza
+     * questo, una fonte resterebbe per sempre "in lavorazione" e il problema
+     * sarebbe leggibile solo in `ai_runs`.
+     */
+    public function failed(?Throwable $exception): void
+    {
+        $sourceId = $this->context['source_id'] ?? null;
+
+        if ($sourceId === null) {
+            return;
+        }
+
+        $lastError = AiRun::query()
+            ->where('task', $this->task)
+            ->where('context', json_encode($this->context))
+            ->latest('id')
+            ->value('error');
+
+        Source::query()->whereKey($sourceId)->update([
+            'status' => SourceStatus::Failed,
+            'error' => $lastError ?? $exception?->getMessage() ?? 'Esecuzione AI fallita.',
         ]);
     }
 
