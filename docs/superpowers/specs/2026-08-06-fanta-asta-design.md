@@ -14,6 +14,7 @@
 | D3 | Pest (versione non detta) | **Pest 4** | Floor di stack. |
 | D4 | Redis/Meilisearch "via Herd" | **Homebrew services** (`brew services start redis|meilisearch`) | L'ambiente reale ha Herd free, che non include servizi. Config identica lato Laravel. |
 | D5 | — | Healthcheck `ai:healthcheck` verifica anche Redis e Meilisearch, non solo `claude` | I servizi ora sono demoni brew: un servizio giù il giorno dell'asta è il rischio operativo n.1. |
+| D6 | Laravel 12 | **Laravel 13.24** (corrente ad agosto 2026) | Il floor di workspace è "12.x minimo, non pin"; `composer create-project` risolve la 13 e tutto l'ecosistema richiesto (Horizon 5, Scout 11, Livewire 4.3, laravel/mcp 0.9, Pest 4) la supporta — verificato dal lockfile, non da memoria. |
 
 ## 2. Ambiente verificato (2026-08-06)
 
