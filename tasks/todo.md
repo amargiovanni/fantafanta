@@ -25,12 +25,12 @@ Regola: la fase N+1 non parte con acceptance della N aperti. Ogni fase chiude co
 - [x] Gate: acceptance Fase 1 §9 (segnale da articolo, needs_review, superseded, ai_runs, PDF)
 
 ## Fase 2 — Cervello
-- [ ] ValuationEngine (PHP puro): base value, segnali, modificatori, inflazione, scarsità, vincolo budget; ricalcolo listone <10s
-- [ ] Migration + model: auctions, acquisitions, plans, plan_slots, valuations
-- [ ] Tool MCP: get_league_state, get_available_players, get_player, get_signals, get_current_plan, get_auction_log, get_budget_analysis, save_plan (validazione dura)
-- [ ] Prompt `generate-plan.md` con dottrina strategica (modificatore difesa ⇒ più budget P+D, tier, ≥2 alternative/slot, rigoristi, diversificazione attacco)
-- [ ] Dashboard pre-asta (piano leggibile/stampabile, top segnali, salute pipeline, bottoni azione)
-- [ ] Gate: acceptance Fase 2 §9 (25 slot validi, piano invalido rifiutato→corretto, infortunio abbassa adjusted_value, <10s)
+- [x] ValuationEngine (PHP puro): base value, segnali, modificatori, inflazione, scarsità, vincolo budget; ricalcolo listone <10s
+- [x] Migration + model: auctions, acquisitions, plans, plan_slots, valuations
+- [x] Tool MCP: get_league_state, get_available_players, get_player, get_signals, get_current_plan, get_auction_log, get_budget_analysis, save_plan (validazione dura)
+- [x] Prompt `generate-plan.md` con dottrina strategica (modificatore difesa ⇒ più budget P+D, tier, ≥2 alternative/slot, rigoristi, diversificazione attacco)
+- [x] Dashboard pre-asta (piano leggibile/stampabile, top segnali, salute pipeline, bottoni azione)
+- [x] Gate: acceptance Fase 2 §9 (25 slot validi, piano invalido rifiutato→corretto, infortunio abbassa adjusted_value, <10s)
 
 ## Fase 3 — Sala d'asta
 - [ ] UI live tre colonne (Livewire 4): search sempre a fuoco, scheda decisione con max_bid enorme, colonna piano vivo, colonna lega, barra mia squadra
