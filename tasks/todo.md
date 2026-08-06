@@ -33,12 +33,12 @@ Regola: la fase N+1 non parte con acceptance della N aperti. Ogni fase chiude co
 - [x] Gate: acceptance Fase 2 §9 (25 slot validi, piano invalido rifiutato→corretto, infortunio abbassa adjusted_value, <10s)
 
 ## Fase 3 — Sala d'asta
-- [ ] UI live tre colonne (Livewire 4): search sempre a fuoco, scheda decisione con max_bid enorme, colonna piano vivo, colonna lega, barra mia squadra
-- [ ] Registrazione tastiera-only ≤3s (prezzo → tasto squadra 1–9/0) + undo soft-delete
-- [ ] Promozione deterministica immediata dell'alternativa su slot perso; replan automatico debounced 20s su coda ai-replan; polling versione piano
-- [ ] Inflazione live nel motore + max_bid ≤ crediti residui − (slot aperti − 1)
-- [ ] Prompt `replan.md` (sempre rosa completa, strategy_notes ≤3 righe)
-- [ ] Gate: acceptance Fase 3 §9
+- [x] UI live tre colonne (Livewire 4): search sempre a fuoco, scheda decisione con max_bid enorme, colonna piano vivo, colonna lega, barra mia squadra
+- [x] Registrazione tastiera-only ≤3s (prezzo → tasto squadra 1–9/0) + undo soft-delete
+- [x] Promozione deterministica immediata dell'alternativa su slot perso; replan automatico debounced 20s su coda ai-replan; polling versione piano
+- [x] Inflazione live nel motore + max_bid ≤ crediti residui − (slot aperti − 1)
+- [x] Prompt `replan.md` (sempre rosa completa, strategy_notes ≤3 righe)
+- [x] Gate: acceptance Fase 3 §9
 
 ## Fase 4 — Scraping automatico
 - [ ] Scheduler 30min su scrape_targets (RSS prima, crawl fallback), dedup hash+titolo
