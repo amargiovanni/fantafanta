@@ -41,10 +41,10 @@ Regola: la fase N+1 non parte con acceptance della N aperti. Ogni fase chiude co
 - [x] Gate: acceptance Fase 3 §9
 
 ## Fase 4 — Scraping automatico
-- [ ] Scheduler 30min su scrape_targets (RSS prima, crawl fallback), dedup hash+titolo
-- [ ] Full scrape on demand con batch progress Horizon
-- [ ] Rate limit 1req/2s per dominio, robots.txt, user-agent, circuit breaker
-- [ ] Gate: acceptance Fase 4 §9
+- [x] Scheduler 30min su scrape_targets (RSS prima, crawl fallback), dedup hash+titolo
+- [x] Full scrape on demand con batch progress Horizon
+- [x] Rate limit 1req/2s per dominio, robots.txt, user-agent, circuit breaker
+- [x] Gate: acceptance Fase 4 §9
 
 ## Fase 5 — Rifinitura
 - [ ] Dark mode, stampa piano, empty states, performance pass sala d'asta
