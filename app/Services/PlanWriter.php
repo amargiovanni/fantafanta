@@ -71,16 +71,32 @@ class PlanWriter
         $mine = $this->myAcquisitions($auction);
 
         $plan = DB::transaction(function () use ($auction, $slots, $strategyNotes, $trigger, $mine) {
-            $version = (int) Plan::query()->where('auction_id', $auction->id)->max('version') + 1;
-
-            $plan = Plan::query()->create([
-                'auction_id' => $auction->id,
-                'version' => $version,
-                'trigger' => $trigger,
-                'status' => PlanStatus::Ready,
+            $attributes = [
                 'strategy_notes' => $strategyNotes !== null ? trim($strategyNotes) : null,
                 'budget_summary' => $this->budgetSummary($slots, $mine),
-            ]);
+                'status' => PlanStatus::Ready,
+            ];
+
+            // Un replan avviato dalla sala ha già scritto la sua riga in stato
+            // `generating` (App\Services\Replanner): è quella che tiene acceso
+            // il badge "ricalcolo in corso". Il piano che arriva la occupa
+            // invece di aggiungersene una accanto — altrimenti la versione
+            // pronta nascerebbe con un numero più alto di quella annunciata e
+            // il badge resterebbe acceso a run finito.
+            $claimed = $this->claimableGeneratingPlan($auction);
+
+            if ($claimed !== null) {
+                $claimed->update($attributes);
+                $claimed->slots()->delete();
+
+                $plan = $claimed;
+            } else {
+                $plan = Plan::query()->create($attributes + [
+                    'auction_id' => $auction->id,
+                    'version' => (int) Plan::query()->where('auction_id', $auction->id)->max('version') + 1,
+                    'trigger' => $trigger,
+                ]);
+            }
 
             foreach ($slots as $slot) {
                 $playerId = (int) $slot['player_id'];
@@ -104,6 +120,24 @@ class PlanWriter
         RecomputeValuations::dispatch($auction->id)->afterCommit();
 
         return $plan->load('slots');
+    }
+
+    /**
+     * La riga `generating` che questo piano viene a riempire, se c'è.
+     *
+     * Se ne considera una sola, la più recente: due righe `generating`
+     * insieme non dovrebbero esistere (Replanner::launch rifiuta di
+     * sovrapporre due run) e, se esistessero, occuparne una a caso sarebbe
+     * peggio che aggiungerne una nuova.
+     */
+    private function claimableGeneratingPlan(Auction $auction): ?Plan
+    {
+        return Plan::query()
+            ->where('auction_id', $auction->id)
+            ->where('status', PlanStatus::Generating)
+            ->orderByDesc('version')
+            ->lockForUpdate()
+            ->first();
     }
 
     /**

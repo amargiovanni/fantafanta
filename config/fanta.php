@@ -26,6 +26,30 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Replanning (briefing §7.3)
+    |--------------------------------------------------------------------------
+    |
+    | Ogni aggiudicazione rende il piano vecchio, ma un run per acquisto
+    | significherebbe tre run mentre il banditore è già al nome dopo. Il replan
+    | parte quindi in coda al silenzio: `debounce` secondi dopo l'ULTIMA
+    | aggiudicazione.
+    |
+    | `max_wait` è il contrappeso: in una fase di asta concitata gli acquisti
+    | possono susseguirsi a meno di venti secondi l'uno dall'altro per minuti,
+    | e un debounce puro non partirebbe mai. Trascorsi `max_wait` secondi dal
+    | primo evento non ancora pianificato il run parte comunque, anche se la
+    | raffica continua.
+    |
+    */
+
+    'replan' => [
+        'debounce' => (int) env('FANTA_REPLAN_DEBOUNCE', 20),
+        'max_wait' => (int) env('FANTA_REPLAN_MAX_WAIT', 90),
+        'queue' => env('FANTA_REPLAN_QUEUE', 'ai-replan'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Server MCP
     |--------------------------------------------------------------------------
     |

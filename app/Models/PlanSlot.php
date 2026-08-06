@@ -22,6 +22,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'role',
     'slot_index',
     'player_id',
+    'original_player_id',
     'target_price',
     'max_price',
     'alternatives',
@@ -36,6 +37,7 @@ class PlanSlot extends Model
         return [
             'role' => PlayerRole::class,
             'slot_index' => 'integer',
+            'original_player_id' => 'integer',
             'target_price' => 'integer',
             'max_price' => 'integer',
             'alternatives' => 'array',
@@ -57,6 +59,17 @@ class PlanSlot extends Model
     public function player(): BelongsTo
     {
         return $this->belongsTo(Player::class);
+    }
+
+    /**
+     * Il titolare designato che è sfumato, quando lo slot è `lost`: `player_id`
+     * a quel punto contiene il ripiego promosso, non più lui.
+     *
+     * @return BelongsTo<Player, $this>
+     */
+    public function originalPlayer(): BelongsTo
+    {
+        return $this->belongsTo(Player::class, 'original_player_id');
     }
 
     /**

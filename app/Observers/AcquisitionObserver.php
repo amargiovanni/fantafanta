@@ -5,9 +5,11 @@ namespace App\Observers;
 use App\Enums\PlayerStatus;
 use App\Jobs\RecomputeValuations;
 use App\Models\Acquisition;
+use App\Models\Auction;
 use App\Models\Player;
 use App\Models\Valuation;
 use App\Services\PlanSlotPromoter;
+use App\Services\Replanner;
 
 /**
  * Tutto ciò che deve succedere, senza eccezioni, quando un giocatore viene
@@ -26,7 +28,10 @@ use App\Services\PlanSlotPromoter;
  */
 class AcquisitionObserver
 {
-    public function __construct(private readonly PlanSlotPromoter $promoter) {}
+    public function __construct(
+        private readonly PlanSlotPromoter $promoter,
+        private readonly Replanner $replanner,
+    ) {}
 
     /**
      * Scatto della valutazione corrente: l'inflazione per ruolo confronta i
@@ -50,24 +55,57 @@ class AcquisitionObserver
         $this->promoter->apply($acquisition);
 
         RecomputeValuations::dispatch($acquisition->auction_id)->afterCommit();
+
+        $this->scheduleReplan($acquisition);
     }
 
     /**
-     * Undo (soft delete): il giocatore torna disponibile e i crediti tornano
-     * alla squadra, che è un effetto derivato del conteggio.
+     * Undo (soft delete): il giocatore torna disponibile, i crediti tornano
+     * alla squadra — effetto derivato del conteggio, nessun campo da toccare —
+     * e il piano torna com'era, promozione compresa.
      */
     public function deleted(Acquisition $acquisition): void
     {
         $this->setPlayerStatus($acquisition, PlayerStatus::Available);
 
+        $this->promoter->revert($acquisition);
+
         RecomputeValuations::dispatch($acquisition->auction_id)->afterCommit();
+
+        $this->scheduleReplan($acquisition);
     }
 
     public function restored(Acquisition $acquisition): void
     {
         $this->setPlayerStatus($acquisition, PlayerStatus::Acquired);
 
+        $this->promoter->apply($acquisition);
+
         RecomputeValuations::dispatch($acquisition->auction_id)->afterCommit();
+
+        $this->scheduleReplan($acquisition);
+    }
+
+    /**
+     * Il piano è diventato vecchio: si programma un replan, in coda al
+     * silenzio (App\Services\Replanner).
+     *
+     * Solo per l'asta in corso: gli acquisti registrati su una sessione in
+     * `setup` o già chiusa — i seed, i test, il simulatore della Fase 5 —
+     * non devono far girare Claude.
+     *
+     * L'asta si rilegge invece di seguire la relazione perché in `deleted` il
+     * modello non è "appena creato" e lo strict mode vieta il lazy loading.
+     */
+    private function scheduleReplan(Acquisition $acquisition): void
+    {
+        $auction = Auction::query()->find($acquisition->auction_id);
+
+        if ($auction === null || ! $auction->isLive()) {
+            return;
+        }
+
+        $this->replanner->schedule($auction);
     }
 
     /**
