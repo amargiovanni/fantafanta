@@ -1,8 +1,20 @@
 <?php
 
+use App\Mcp\Servers\FantaAstaServer;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Process;
+
+/**
+ * Il server MCP sano espone esattamente i tool che dichiara: l'healthcheck
+ * confronta i due numeri, quindi la finta deve dichiararne altrettanti.
+ *
+ * @return array<int, array{name: string}>
+ */
+function toolEsposti(): array
+{
+    return array_fill(0, FantaAstaServer::declaredToolCount(), ['name' => 'un_tool']);
+}
 
 function fakeServiziSani(): void
 {
@@ -10,9 +22,7 @@ function fakeServiziSani(): void
 
     Http::fake([
         '*/health' => Http::response(['status' => 'available']),
-        '*/mcp' => Http::response(['jsonrpc' => '2.0', 'id' => 1, 'result' => ['tools' => [
-            ['name' => 'search_player'], ['name' => 'save_signals'],
-        ]]]),
+        '*/mcp' => Http::response(['jsonrpc' => '2.0', 'id' => 1, 'result' => ['tools' => toolEsposti()]]),
     ]);
 }
 
@@ -33,7 +43,7 @@ it('esce con codice 1 se il binario claude non risponde', function () {
     Process::fake(['*claude*' => Process::result(output: '', errorOutput: 'command not found', exitCode: 127)]);
     Http::fake([
         '*/health' => Http::response(['status' => 'available']),
-        '*/mcp' => Http::response(['result' => ['tools' => [['name' => 'search_player']]]]),
+        '*/mcp' => Http::response(['result' => ['tools' => toolEsposti()]]),
     ]);
 
     $this->artisan('ai:healthcheck')
@@ -46,7 +56,7 @@ it('esce con codice 1 se Meilisearch è giù e suggerisce come riavviarlo', func
     Process::fake(['*claude*' => Process::result(output: '2.1.220')]);
     Http::fake([
         '*/health' => fn () => throw new ConnectionException('Connection refused'),
-        '*/mcp' => Http::response(['result' => ['tools' => [['name' => 'search_player']]]]),
+        '*/mcp' => Http::response(['result' => ['tools' => toolEsposti()]]),
     ]);
 
     // Un servizio giù non deve far esplodere il comando: deve farlo riportare.
@@ -64,5 +74,19 @@ it('esce con codice 1 se il server MCP non espone tool', function () {
 
     $this->artisan('ai:healthcheck')
         ->expectsOutputToContain('nessun tool nella risposta')
+        ->assertExitCode(1);
+});
+
+it('esce con codice 1 se il server espone meno tool di quanti ne dichiara', function () {
+    Process::fake(['*claude*' => Process::result(output: '2.1.220')]);
+    Http::fake([
+        '*/health' => Http::response(['status' => 'available']),
+        '*/mcp' => Http::response(['result' => ['tools' => [['name' => 'search_player']]]]),
+    ]);
+
+    // Una registrazione saltata non si vede finché un run headless non
+    // fallisce a metà: l'healthcheck deve accorgersene prima.
+    $this->artisan('ai:healthcheck')
+        ->expectsOutputToContain('qualche registrazione non è arrivata')
         ->assertExitCode(1);
 });
