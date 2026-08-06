@@ -11,6 +11,9 @@ use App\Models\Signal;
 use App\Models\Team;
 use App\Models\Valuation;
 use App\Services\ValuationEngine;
+use Illuminate\Bus\DebounceLock;
+use Illuminate\Contracts\Cache\Repository as Cache;
+use Illuminate\Queue\Attributes\DebounceFor;
 use Illuminate\Support\Facades\Queue;
 
 /**
@@ -33,6 +36,11 @@ it('parte quando nasce un segnale', function () {
 });
 
 it('parte quando un segnale viene corretto o superato', function () {
+    // Queue::fake() registra ogni dispatch così com'è, delay compreso: il
+    // debounce (ADR 0004) scarta i job superati solo all'esecuzione reale
+    // in coda (vedi CallQueuedHandler::commandShouldBeDebounced()), non al
+    // push. Tre dispatch restano quindi visibili qui; la deduplica vera è
+    // coperta più sotto, sull'owner token del marker di debounce.
     $signal = Signal::factory()->create(['player_id' => giocatore(PlayerRole::Difensore)->id]);
 
     Queue::fake();
@@ -142,4 +150,52 @@ it('il job scrive davvero le valutazioni quando la coda lo esegue', function () 
 
 it('gira sulla coda default, non su quelle dell\'AI', function () {
     expect((new RecomputeValuations)->queue)->toBe('default');
+});
+
+it('debounce: di una raffica sulla stessa asta sopravvive solo l\'ultimo dispatch', function () {
+    Queue::fake();
+
+    $auction = Auction::factory()->create();
+
+    RecomputeValuations::dispatch($auction->id);
+    RecomputeValuations::dispatch($auction->id);
+    RecomputeValuations::dispatch($auction->id);
+
+    $jobs = Queue::pushed(RecomputeValuations::class)->values();
+    expect($jobs)->toHaveCount(3);
+
+    $lock = new DebounceLock(app(Cache::class));
+    $currentOwner = $lock->getCurrentOwner($jobs->last());
+
+    expect($jobs[0]->debounceOwner)->not->toBe($currentOwner)
+        ->and($jobs[1]->debounceOwner)->not->toBe($currentOwner)
+        ->and($jobs[2]->debounceOwner)->toBe($currentOwner)
+        ->and($jobs[2]->delay)->toBe(5);
+});
+
+it('debounce: aste diverse non si cancellano a vicenda', function () {
+    Queue::fake();
+
+    $auctionA = Auction::factory()->create();
+    $auctionB = Auction::factory()->create();
+
+    RecomputeValuations::dispatch($auctionA->id);
+    RecomputeValuations::dispatch($auctionB->id);
+
+    $lock = new DebounceLock(app(Cache::class));
+
+    foreach (Queue::pushed(RecomputeValuations::class) as $job) {
+        expect($lock->getCurrentOwner($job))->toBe($job->debounceOwner);
+    }
+});
+
+it('il debounce è configurabile via config, il tetto d\'attesa no (limite degli attributi PHP)', function () {
+    config(['fanta.recompute_valuations.debounce' => 12]);
+
+    expect((new RecomputeValuations)->debounceFor)->toBe(12);
+
+    $attribute = (new ReflectionClass(RecomputeValuations::class))
+        ->getAttributes(DebounceFor::class)[0]->newInstance();
+
+    expect($attribute->maxWait)->toBe(30);
 });
