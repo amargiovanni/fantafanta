@@ -97,6 +97,11 @@ return [
     */
 
     'waits' => [
+        // Il replan deve completare in 30–90s (briefing §7.3): un'attesa in
+        // coda oltre i 30s è già un sintomo da segnalare.
+        'redis:ai-replan' => 30,
+        'redis:ai' => 300,
+        'redis:scraping' => 600,
         'redis:default' => 60,
     ],
 
@@ -196,10 +201,49 @@ return [
     |
     */
 
+    /*
+    | Tre supervisor separati, non un unico supervisor con code ordinate: un
+    | replan non deve MAI attendere che finisca un'estrazione segnali da 4
+    | minuti. La priorità si ottiene con processi dedicati, non con l'ordine
+    | delle code (briefing §7.3, design §3).
+    |
+    | I timeout delle code AI (600s) sono volutamente più larghi del timeout
+    | del processo `claude -p` (300s, imposto dal job): è il job a decidere
+    | quando arrendersi, non il worker a ucciderlo a metà scrittura MCP.
+    */
+
     'defaults' => [
-        'supervisor-1' => [
+        'supervisor-replan' => [
             'connection' => 'redis',
-            'queue' => ['default'],
+            'queue' => ['ai-replan'],
+            'balance' => 'auto',
+            'autoScalingStrategy' => 'time',
+            'maxProcesses' => 1,
+            'maxTime' => 0,
+            'maxJobs' => 0,
+            'memory' => 256,
+            'tries' => 1,
+            'timeout' => 600,
+            'nice' => 0,
+        ],
+
+        'supervisor-ai' => [
+            'connection' => 'redis',
+            'queue' => ['ai'],
+            'balance' => 'auto',
+            'autoScalingStrategy' => 'time',
+            'maxProcesses' => 1,
+            'maxTime' => 0,
+            'maxJobs' => 0,
+            'memory' => 256,
+            'tries' => 1,
+            'timeout' => 600,
+            'nice' => 0,
+        ],
+
+        'supervisor-general' => [
+            'connection' => 'redis',
+            'queue' => ['scraping', 'default'],
             'balance' => 'auto',
             'autoScalingStrategy' => 'time',
             'maxProcesses' => 1,
@@ -207,22 +251,37 @@ return [
             'maxJobs' => 0,
             'memory' => 128,
             'tries' => 1,
-            'timeout' => 60,
-            'nice' => 0,
+            'timeout' => 120,
+            'nice' => 5,
         ],
     ],
 
     'environments' => [
         'production' => [
-            'supervisor-1' => [
-                'maxProcesses' => 10,
+            'supervisor-replan' => [
+                'maxProcesses' => 2,
+            ],
+            'supervisor-ai' => [
+                'maxProcesses' => 3,
+            ],
+            'supervisor-general' => [
+                'maxProcesses' => 5,
                 'balanceMaxShift' => 1,
                 'balanceCooldown' => 3,
             ],
         ],
 
         'local' => [
-            'supervisor-1' => [
+            // Un solo processo per il replan: le esecuzioni di Claude Code
+            // sono seriali per natura (una sessione CLI per volta) e più
+            // processi paralleli si contenderebbero la stessa sottoscrizione.
+            'supervisor-replan' => [
+                'maxProcesses' => 1,
+            ],
+            'supervisor-ai' => [
+                'maxProcesses' => 2,
+            ],
+            'supervisor-general' => [
                 'maxProcesses' => 3,
             ],
         ],

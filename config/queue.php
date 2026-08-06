@@ -68,7 +68,10 @@ return [
             'driver' => 'redis',
             'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
             'queue' => env('REDIS_QUEUE', 'default'),
-            'retry_after' => (int) env('REDIS_QUEUE_RETRY_AFTER', 90),
+            // Deve restare maggiore del timeout più alto fra i supervisor di
+            // Horizon (600s sulle code AI), altrimenti un job `claude -p` ancora
+            // vivo verrebbe rimesso in coda e eseguito due volte.
+            'retry_after' => (int) env('REDIS_QUEUE_RETRY_AFTER', 700),
             'block_for' => null,
             'after_commit' => false,
         ],
