@@ -16,3 +16,22 @@
     --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
 }
+
+/*
+ * La stampa del piano deve leggersi anche con il tema scuro attivo. I
+ * browser di norma non stampano gli sfondi (l'opzione "Grafica di sfondo" è
+ * spenta per default), ma STAMPANO il colore del testo: con `data-theme`
+ * scuro, `dark:text-slate-100` finirebbe bianco su una pagina bianca. Questo
+ * blocco forza l'aspetto chiaro in stampa a prescindere dal tema scelto,
+ * indipendentemente dall'ordine di generazione delle utility `dark:`.
+ */
+@media print {
+    :root, [data-theme='dark'] {
+        color-scheme: light;
+    }
+
+    body {
+        background-color: #fff !important;
+        color: #0f172a !important;
+    }
+}

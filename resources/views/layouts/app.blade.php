@@ -65,7 +65,7 @@
 
         {{-- La sala d'asta lavora a tre colonne dense: 6xl stringerebbe la
              colonna lega fino a renderla illeggibile. --}}
-        <main class="mx-auto w-full flex-1 px-4 {{ request()->routeIs('asta') ? 'max-w-[110rem] py-4' : 'max-w-6xl py-8' }}">
+        <main class="mx-auto w-full flex-1 px-4 print:max-w-none print:px-0 print:py-0 {{ request()->routeIs('asta') ? 'max-w-[110rem] py-4' : 'max-w-6xl py-8' }}">
             {{ $slot }}
         </main>
     </div>

@@ -182,6 +182,28 @@ it('mostra il piano corrente per reparto, con alternative, note e versione', fun
         ->assertSee('Da prendere');
 });
 
+it('offre la stampa del piano con una testata dedicata alla pagina stampata', function () {
+    Queue::fake();
+
+    configuraLega();
+    registraSquadre();
+    $auction = Auction::factory()->create();
+    $listone = listonePerPiano();
+
+    app(PlanWriter::class)->save($auction, pianoValido($listone), 'Nota di piano.');
+
+    Livewire::test(Dashboard::class)
+        ->assertSee('Stampa piano')
+        ->assertSeeHtml('window.print()')
+        ->assertSee('Piano d\'acquisto — versione 1', false);
+});
+
+it('non mostra il bottone di stampa senza un piano', function () {
+    Queue::fake();
+
+    Livewire::test(Dashboard::class)->assertDontSee('Stampa piano');
+});
+
 it('segnala quando una versione più recente del piano è in elaborazione', function () {
     Queue::fake();
 
