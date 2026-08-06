@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\PlayerStatus;
 use App\Models\Player;
 use App\Services\ListoneImporter;
 use App\Services\PlayerSearch;
@@ -56,7 +57,7 @@ it('returns an empty collection for a blank query', function () {
 
 it('does not resolve a player removed from the listone', function () {
     $lautaro = Player::where('normalized_name', 'martinez lautaro')->firstOrFail();
-    $lautaro->update(['status' => \App\Enums\PlayerStatus::Removed]);
+    $lautaro->update(['status' => PlayerStatus::Removed]);
 
     $results = (new PlayerSearch)->search('lautaro');
 
