@@ -1,5 +1,6 @@
 <?php
 
+use App\Livewire\Auction\Room as AuctionRoom;
 use App\Livewire\Dashboard;
 use App\Livewire\Knowledge\Index as KnowledgeIndex;
 use App\Livewire\Knowledge\Review as KnowledgeReview;
@@ -10,6 +11,7 @@ use App\Livewire\Listone\Index as ListoneIndex;
 use Illuminate\Support\Facades\Route;
 
 Route::livewire('/', Dashboard::class)->name('dashboard');
+Route::livewire('/asta', AuctionRoom::class)->name('asta');
 Route::livewire('/listone', ListoneIndex::class)->name('listone.index');
 Route::livewire('/listone/import', ListoneImport::class)->name('listone.import');
 Route::livewire('/lega', LeagueManage::class)->name('lega.manage');

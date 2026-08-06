@@ -42,6 +42,7 @@ class PlanSlotPromoter
 
         return DB::transaction(function () use ($plan, $acquisition, $isMine, $playerId) {
             $outcomes = [];
+            $journal = [];
 
             /** @var array<int, PlanSlot> $slots */
             $slots = $plan->slots()->orderBy('role')->orderBy('slot_index')->get()->all();
@@ -53,8 +54,12 @@ class PlanSlotPromoter
             $available = array_values(array_diff($available, [$playerId]));
 
             foreach ($slots as $slot) {
+                $before = $this->snapshot($slot);
+
                 if ($slot->slot_status !== SlotStatus::Pending || (int) $slot->player_id !== $playerId) {
-                    $this->pruneAlternatives($slot, $playerId);
+                    if ($this->pruneAlternatives($slot, $playerId)) {
+                        $journal[] = ['slot_id' => (int) $slot->id, 'before' => $before];
+                    }
 
                     continue;
                 }
@@ -62,10 +67,83 @@ class PlanSlotPromoter
                 $outcomes[] = $isMine
                     ? $this->markAcquired($slot, $acquisition)
                     : $this->markLostAndPromote($slot, $available);
+
+                $journal[] = ['slot_id' => (int) $slot->id, 'before' => $before];
             }
+
+            $acquisition->plan_effects = $journal !== [] ? $journal : null;
+            $acquisition->saveQuietly();
 
             return $outcomes;
         });
+    }
+
+    /**
+     * Rimette il piano com'era prima di quell'aggiudicazione.
+     *
+     * L'undo della sala d'asta deve essere un `revert`, non una ricostruzione
+     * per inferenza: rifare il ragionamento all'indietro ("quale alternativa
+     * avrò promosso?") darebbe la risposta giusta solo finché lo stato non si
+     * muove sotto, e in asta si muove. Il giornale scritto da `apply()` dice
+     * esattamente quali slot sono stati toccati e con quali valori: qui si
+     * riscrivono quelli, e nient'altro.
+     *
+     * @return int quanti slot sono stati ripristinati
+     */
+    public function revert(Acquisition $acquisition): int
+    {
+        $journal = $acquisition->plan_effects ?? [];
+
+        if ($journal === []) {
+            return 0;
+        }
+
+        $reverted = DB::transaction(function () use ($journal) {
+            $count = 0;
+
+            foreach ($journal as $entry) {
+                $slotId = (int) ($entry['slot_id'] ?? 0);
+                $before = $entry['before'] ?? null;
+
+                if ($slotId === 0 || ! is_array($before)) {
+                    continue;
+                }
+
+                $count += PlanSlot::query()->whereKey($slotId)->update([
+                    'player_id' => $before['player_id'] ?? null,
+                    'original_player_id' => $before['original_player_id'] ?? null,
+                    'target_price' => (int) ($before['target_price'] ?? 1),
+                    'max_price' => (int) ($before['max_price'] ?? 1),
+                    'alternatives' => json_encode($before['alternatives'] ?? []),
+                    'slot_status' => (string) ($before['slot_status'] ?? SlotStatus::Pending->value),
+                ]);
+            }
+
+            return $count;
+        });
+
+        $acquisition->plan_effects = null;
+        $acquisition->saveQuietly();
+
+        return $reverted;
+    }
+
+    /**
+     * I soli campi che `apply()` può toccare. Fotografarli tutti costa nulla e
+     * rende il revert indipendente da quale ramo è stato preso.
+     *
+     * @return array<string, mixed>
+     */
+    private function snapshot(PlanSlot $slot): array
+    {
+        return [
+            'player_id' => $slot->player_id !== null ? (int) $slot->player_id : null,
+            'original_player_id' => $slot->original_player_id !== null ? (int) $slot->original_player_id : null,
+            'target_price' => (int) $slot->target_price,
+            'max_price' => (int) $slot->max_price,
+            'alternatives' => array_values($slot->alternatives ?? []),
+            'slot_status' => $slot->slot_status->value,
+        ];
     }
 
     /**
@@ -114,6 +192,11 @@ class PlanSlotPromoter
 
         $slot->update([
             'slot_status' => SlotStatus::Lost,
+
+            // Il nome perso: la sala lo mostra barrato con sotto il ripiego,
+            // e `player_id` da qui in poi non è più lui.
+            'original_player_id' => $slot->original_player_id ?? $slot->player_id,
+
             'player_id' => $promoted !== null ? (int) $promoted['player_id'] : null,
             'target_price' => $promoted !== null
                 ? max(1, (int) ($promoted['target_price'] ?? 1))
@@ -134,8 +217,10 @@ class PlanSlotPromoter
      * Toglie dalle alternative degli altri slot un giocatore che ormai è
      * assegnato: che sia finito a me o a un avversario, non è più un ripiego
      * disponibile e lasciarlo in lista significherebbe promuoverlo domani.
+     *
+     * @return bool se lo slot è stato davvero modificato (va nel giornale)
      */
-    private function pruneAlternatives(PlanSlot $slot, int $playerId): void
+    private function pruneAlternatives(PlanSlot $slot, int $playerId): bool
     {
         $alternatives = array_values(array_filter(
             $slot->alternatives ?? [],
@@ -143,10 +228,12 @@ class PlanSlotPromoter
         ));
 
         if (count($alternatives) === count($slot->alternatives ?? [])) {
-            return;
+            return false;
         }
 
         $slot->update(['alternatives' => array_values($alternatives)]);
+
+        return true;
     }
 
     /**

@@ -173,3 +173,101 @@ it('non tocca gli slot che riguardano altri giocatori', function () {
     expect($dopo->slot_status)->toBe(SlotStatus::Pending)
         ->and($dopo->player_id)->toBe($altro->player_id);
 });
+
+/*
+|--------------------------------------------------------------------------
+| Revert — l'undo della sala d'asta (Fase 3)
+|--------------------------------------------------------------------------
+|
+| La promozione deve essere annullabile esattamente, non "più o meno":
+| l'alternativa promossa torna in lista al suo posto, lo slot torna pending
+| col titolare designato, e le alternative potate dagli altri slot tornano
+| dov'erano. È per quello che `apply()` lascia un giornale sull'acquisto
+| invece di far ricostruire il passato a chi annulla.
+*/
+
+it('rimette lo slot esattamente com\'era, alternativa promossa compresa', function () {
+    $slot = slotDi($this->piano, 'D', 1);
+    $prima = [
+        'player_id' => $slot->player_id,
+        'target_price' => $slot->target_price,
+        'max_price' => $slot->max_price,
+        'alternatives' => $slot->alternatives,
+        'slot_status' => $slot->slot_status,
+    ];
+
+    $acquisto = Acquisition::factory()->create([
+        'auction_id' => $this->auction->id,
+        'player_id' => $slot->player_id,
+        'team_id' => $this->squadre[4]->id,
+        'price' => 30,
+    ]);
+
+    expect(slotDi($this->piano, 'D', 1)->slot_status)->toBe(SlotStatus::Lost)
+        ->and($acquisto->fresh()->plan_effects)->not->toBeNull();
+
+    $this->promoter->revert($acquisto->fresh());
+
+    $dopo = slotDi($this->piano, 'D', 1);
+
+    expect($dopo->player_id)->toBe($prima['player_id'])
+        ->and($dopo->original_player_id)->toBeNull()
+        ->and($dopo->target_price)->toBe($prima['target_price'])
+        ->and($dopo->max_price)->toBe($prima['max_price'])
+        ->and($dopo->alternatives)->toBe($prima['alternatives'])
+        ->and($dopo->slot_status)->toBe($prima['slot_status']);
+});
+
+it('rimette anche le alternative potate dagli altri slot', function () {
+    $slot = slotDi($this->piano, 'D', 3);
+    $riserva = $slot->alternatives[0]['player_id'];
+
+    $alternativePrima = $this->piano->slots()->where('role', 'D')->orderBy('slot_index')->get()
+        ->mapWithKeys(fn (PlanSlot $s) => [$s->slot_index => $s->alternatives]);
+
+    $acquisto = Acquisition::factory()->create([
+        'auction_id' => $this->auction->id,
+        'player_id' => $riserva,
+        'team_id' => $this->squadre[7]->id,
+        'price' => 8,
+    ]);
+
+    $this->promoter->revert($acquisto->fresh());
+
+    $alternativeDopo = $this->piano->slots()->where('role', 'D')->orderBy('slot_index')->get()
+        ->mapWithKeys(fn (PlanSlot $s) => [$s->slot_index => $s->alternatives]);
+
+    expect($alternativeDopo->all())->toBe($alternativePrima->all());
+});
+
+it('riapre lo slot che avevo chiuso comprando io il titolare', function () {
+    $slot = slotDi($this->piano, 'A', 1);
+
+    $acquisto = Acquisition::factory()->create([
+        'auction_id' => $this->auction->id,
+        'player_id' => $slot->player_id,
+        'team_id' => $this->squadre[0]->id,   // la mia
+        'price' => 60,
+    ]);
+
+    expect(slotDi($this->piano, 'A', 1)->slot_status)->toBe(SlotStatus::Acquired);
+
+    $this->promoter->revert($acquisto->fresh());
+
+    $dopo = slotDi($this->piano, 'A', 1);
+
+    expect($dopo->slot_status)->toBe(SlotStatus::Pending)
+        ->and($dopo->target_price)->toBe($slot->target_price)
+        ->and($dopo->player_id)->toBe($slot->player_id);
+});
+
+it('un revert senza giornale non fa danni', function () {
+    $acquisto = Acquisition::factory()->create([
+        'auction_id' => Auction::factory()->create()->id,
+        'player_id' => giocatore(PlayerRole::Portiere)->id,
+        'team_id' => $this->squadre[2]->id,
+        'price' => 3,
+    ]);
+
+    expect($this->promoter->revert($acquisto->fresh()))->toBe(0);
+});

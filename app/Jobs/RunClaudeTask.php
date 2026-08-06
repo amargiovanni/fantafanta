@@ -3,13 +3,16 @@
 namespace App\Jobs;
 
 use App\Enums\AiRunStatus;
+use App\Enums\PlanStatus;
 use App\Enums\SourceStatus;
 use App\Models\AiRun;
+use App\Models\Plan;
 use App\Models\Source;
 use App\Support\PromptComposer;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Process;
+use Illuminate\Support\Str;
 use Throwable;
 
 /**
@@ -118,22 +121,34 @@ class RunClaudeTask implements ShouldQueue
      */
     public function failed(?Throwable $exception): void
     {
-        $sourceId = $this->context['source_id'] ?? null;
-
-        if ($sourceId === null) {
-            return;
-        }
-
         $lastError = AiRun::query()
             ->where('task', $this->task)
             ->where('context', json_encode($this->context))
             ->latest('id')
             ->value('error');
 
-        Source::query()->whereKey($sourceId)->update([
-            'status' => SourceStatus::Failed,
-            'error' => $lastError ?? $exception?->getMessage() ?? 'Esecuzione AI fallita.',
-        ]);
+        $message = $lastError ?? $exception?->getMessage() ?? 'Esecuzione AI fallita.';
+
+        if ($sourceId = $this->context['source_id'] ?? null) {
+            Source::query()->whereKey($sourceId)->update([
+                'status' => SourceStatus::Failed,
+                'error' => $message,
+            ]);
+        }
+
+        // La riga `plans` creata all'avvio del replan resterebbe altrimenti in
+        // `generating` per sempre: il badge "ricalcolo in corso" rimarrebbe
+        // acceso tutta la sera e `save_plan` occuperebbe più tardi una riga che
+        // appartiene a un run morto.
+        if ($planId = $this->context['plan_id'] ?? null) {
+            Plan::query()
+                ->whereKey($planId)
+                ->where('status', PlanStatus::Generating)
+                ->update([
+                    'status' => PlanStatus::Failed,
+                    'strategy_notes' => Str::limit('Replan fallito: '.$message, 480),
+                ]);
+        }
     }
 
     /**

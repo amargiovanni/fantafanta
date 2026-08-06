@@ -18,7 +18,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * ogni calcolo di inflazione lavora sulle righe non cancellate.
  */
 #[ObservedBy(AcquisitionObserver::class)]
-#[Fillable(['auction_id', 'player_id', 'team_id', 'price', 'valuation_at_purchase'])]
+#[Fillable(['auction_id', 'player_id', 'team_id', 'price', 'valuation_at_purchase', 'plan_effects'])]
 class Acquisition extends Model
 {
     use HasFactory, SoftDeletes;
@@ -28,6 +28,7 @@ class Acquisition extends Model
         return [
             'price' => 'integer',
             'valuation_at_purchase' => 'float',
+            'plan_effects' => 'array',
         ];
     }
 

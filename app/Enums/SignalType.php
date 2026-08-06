@@ -40,6 +40,31 @@ enum SignalType: string
     }
 
     /**
+     * Icona con cui il segnale compare nella riga della scheda decisione
+     * (briefing §8.2).
+     *
+     * Sta nell'enum e non nella view perché la stessa riga di icone serve
+     * alla sala d'asta e al backoffice: due tabelle di simboli che divergono
+     * sono due significati per lo stesso segnale.
+     */
+    public function icon(): string
+    {
+        return match ($this) {
+            self::Infortunio => '🚑',
+            self::Rientro => '✅',
+            self::Squalifica => '🟥',
+            self::Rigorista => '🎯',
+            self::Ballottaggio => '⚖️',
+            self::Titolarita => '⭐',
+            self::MercatoIn => '📥',
+            self::MercatoOut => '📤',
+            self::CambioModulo => '♟️',
+            self::Forma => '📈',
+            self::Altro => 'ℹ️',
+        };
+    }
+
+    /**
      * Tipi che questo segnale rende obsoleti quando è più recente.
      *
      * Usato dalla pipeline e dal backoffice come suggerimento: un "rientro"

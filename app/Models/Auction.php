@@ -10,13 +10,17 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Sessione d'asta (briefing §4).
  *
- * In Fase 2 serve solo come contenitore: il piano e le aggiudicazioni devono
- * appartenere a qualcosa. Il passaggio setup → live e la sala d'asta sono
- * Fase 3.
+ * Tre stati: `setup` (si prepara: squadre, listone, primo piano), `live` (la
+ * sala d'asta registra) e `closed` (archiviata, sola lettura).
+ *
+ * L'ultima versione pronta del piano appartiene alla sessione, non
+ * all'applicazione: aprire l'asta dell'anno prossimo non deve far ricomparire
+ * il piano di quest'anno.
  */
 #[Fillable(['name', 'status', 'started_at'])]
 class Auction extends Model
@@ -65,6 +69,65 @@ class Auction extends Model
     public static function current(): ?self
     {
         return static::query()->open()->latest('id')->first();
+    }
+
+    /**
+     * La sessione effettivamente in corso: è l'unica in cui la sala d'asta
+     * registra qualcosa.
+     *
+     * Il vincolo "una sola live per volta" è applicativo come quello di
+     * `is_mine` sulle squadre: `start()` chiude quello che trova aperto prima
+     * di aprirsi, quindi questa query non può restituirne due — e se una
+     * migrazione o un import sporcassero i dati, prende comunque la più
+     * recente invece di lamentarsi la sera dell'asta.
+     */
+    public static function live(): ?self
+    {
+        return static::query()->where('status', AuctionStatus::Live)->latest('id')->first();
+    }
+
+    /**
+     * setup → live. Idempotente su una sessione già live.
+     *
+     * Registrare due aste contemporaneamente significherebbe due verità sui
+     * crediti spesi, quindi l'unica altra sessione live viene chiusa qui,
+     * nella stessa transazione: non c'è un istante in cui ne esistono due.
+     */
+    public function start(): void
+    {
+        if ($this->status === AuctionStatus::Live) {
+            return;
+        }
+
+        DB::transaction(function () {
+            static::query()
+                ->where('status', AuctionStatus::Live)
+                ->whereKeyNot($this->getKey())
+                ->update(['status' => AuctionStatus::Closed]);
+
+            $this->forceFill([
+                'status' => AuctionStatus::Live,
+                'started_at' => $this->started_at ?? now(),
+            ])->save();
+        });
+    }
+
+    /**
+     * live → closed. La sala smette di accettare registrazioni; i dati
+     * restano leggibili.
+     */
+    public function close(): void
+    {
+        if ($this->status === AuctionStatus::Closed) {
+            return;
+        }
+
+        $this->forceFill(['status' => AuctionStatus::Closed])->save();
+    }
+
+    public function isLive(): bool
+    {
+        return $this->status === AuctionStatus::Live;
     }
 
     /**
