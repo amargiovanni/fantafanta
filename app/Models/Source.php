@@ -8,6 +8,7 @@ use App\Enums\SourceType;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
@@ -19,13 +20,16 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'type',
     'title',
     'url',
+    'published_at',
     'file_path',
     'raw_content',
     'content_hash',
     'origin',
+    'scrape_target_id',
     'processed_at',
     'status',
     'error',
+    'queue_note',
 ])]
 class Source extends Model
 {
@@ -38,6 +42,7 @@ class Source extends Model
             'origin' => SourceOrigin::class,
             'status' => SourceStatus::class,
             'processed_at' => 'datetime',
+            'published_at' => 'datetime',
         ];
     }
 
@@ -47,6 +52,17 @@ class Source extends Model
     public function signals(): HasMany
     {
         return $this->hasMany(Signal::class);
+    }
+
+    /**
+     * Testata da cui questo articolo è stato scaricato (Fase 4). Assente per
+     * le fonti caricate a mano.
+     *
+     * @return BelongsTo<ScrapeTarget, $this>
+     */
+    public function scrapeTarget(): BelongsTo
+    {
+        return $this->belongsTo(ScrapeTarget::class);
     }
 
     /**

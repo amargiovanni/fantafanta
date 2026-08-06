@@ -5,6 +5,10 @@ namespace App\Jobs;
 use App\Enums\SourceStatus;
 use App\Enums\SourceType;
 use App\Models\Source;
+use App\Scraping\Support\Exceptions\CircuitOpenException;
+use App\Scraping\Support\Exceptions\RobotsDisallowedException;
+use App\Scraping\Support\Exceptions\ScrapingHttpException;
+use App\Scraping\Support\ScrapingHttpClient;
 use App\Support\Extraction\ArticleExtractor;
 use App\Support\Extraction\PdfTextExtractor;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -37,7 +41,7 @@ class ProcessSource implements ShouldQueue
         $this->onQueue('ai');
     }
 
-    public function handle(ArticleExtractor $articles, PdfTextExtractor $pdfs): void
+    public function handle(ArticleExtractor $articles, PdfTextExtractor $pdfs, ScrapingHttpClient $scrapingHttp): void
     {
         $source = Source::query()->find($this->sourceId);
 
@@ -48,7 +52,7 @@ class ProcessSource implements ShouldQueue
         $source->update(['status' => SourceStatus::Processing, 'error' => null]);
 
         try {
-            $content = $this->extractContent($source, $articles, $pdfs);
+            $content = $this->extractContent($source, $articles, $pdfs, $scrapingHttp);
         } catch (Throwable $exception) {
             $source->update([
                 'status' => SourceStatus::Failed,
@@ -100,11 +104,12 @@ class ProcessSource implements ShouldQueue
         ])->dispatch();
     }
 
-    private function extractContent(Source $source, ArticleExtractor $articles, PdfTextExtractor $pdfs): string
+    private function extractContent(Source $source, ArticleExtractor $articles, PdfTextExtractor $pdfs, ScrapingHttpClient $scrapingHttp): string
     {
         $content = match ($source->type) {
             SourceType::Pdf => $pdfs->extract($this->absolutePath($source)),
-            SourceType::Link, SourceType::ScrapedArticle => $this->extractFromUrl($source, $articles),
+            SourceType::Link => $this->extractFromUrl($source, $articles),
+            SourceType::ScrapedArticle => $this->extractFromScrapedUrl($source, $articles, $scrapingHttp),
             SourceType::Doc => $this->extractFromTextFile($source),
             SourceType::Note => (string) $source->raw_content,
         };
@@ -141,6 +146,47 @@ class ProcessSource implements ShouldQueue
         $text = $articles->extract($html);
 
         // Se la fonte è arrivata senza un titolo utile, si prende quello della pagina.
+        if ($source->title === '' || $source->title === $source->url) {
+            if ($title = $articles->title($html)) {
+                $source->update(['title' => mb_substr($title, 0, 255)]);
+            }
+        }
+
+        return $text;
+    }
+
+    /**
+     * Come `extractFromUrl`, ma per gli articoli scaricati dallo scraping
+     * automatico: la richiesta passa da `ScrapingHttpClient` invece che da un
+     * fetch "nudo", perché la spec (§Etica e robustezza) tratta esplicitamente
+     * "il job dell'articolo" come soggetto a backoff su 429/5xx e a circuito —
+     * non solo la fase di scoperta. Un link incollato a mano da Andrea resta
+     * sul percorso semplice: è un fetch deliberato e isolato, non crawling.
+     */
+    private function extractFromScrapedUrl(Source $source, ArticleExtractor $articles, ScrapingHttpClient $scrapingHttp): string
+    {
+        if (blank($source->url)) {
+            throw new RuntimeException('Fonte di tipo link senza URL.');
+        }
+
+        $target = $source->scrapeTarget;
+
+        if ($target === null) {
+            // Non dovrebbe accadere (ScrapeRunner valorizza sempre scrape_target_id),
+            // ma un articolo scaricato senza testata associata non deve bloccarsi
+            // silenziosamente: si degrada al fetch semplice.
+            return $this->extractFromUrl($source, $articles);
+        }
+
+        try {
+            $response = $scrapingHttp->get($target, $source->url);
+        } catch (CircuitOpenException|RobotsDisallowedException|ScrapingHttpException $exception) {
+            throw new RuntimeException($exception->getMessage(), previous: $exception);
+        }
+
+        $html = $response->body();
+        $text = $articles->extract($html);
+
         if ($source->title === '' || $source->title === $source->url) {
             if ($title = $articles->title($html)) {
                 $source->update(['title' => mb_substr($title, 0, 255)]);

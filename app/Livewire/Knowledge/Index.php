@@ -139,6 +139,22 @@ class Index extends Component
         session()->flash('conoscenza', 'Fonte eliminata insieme ai suoi segnali.');
     }
 
+    /**
+     * Una source scaricata dallo scraping può restare in coda oltre il tetto
+     * di estrazioni del giro (spec Fase 4, §Tetto): questo bottone la manda
+     * comunque in pipeline, fuori tetto — è una scelta esplicita di Andrea,
+     * non automatica.
+     */
+    public function processAnyway(int $sourceId): void
+    {
+        $source = Source::query()->findOrFail($sourceId);
+        $source->update(['queue_note' => null]);
+
+        ProcessSource::dispatch($source->id);
+
+        session()->flash('conoscenza', 'Fonte messa in coda per l\'estrazione, fuori dal tetto del giro.');
+    }
+
     public function render(): View
     {
         return view('livewire.knowledge.index', [

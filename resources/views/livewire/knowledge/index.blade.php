@@ -17,6 +17,9 @@
             <a href="{{ route('conoscenza.segnali') }}" class="rounded-md border border-slate-300 px-3 py-1.5 font-medium text-slate-700 hover:bg-slate-100">
                 Segnali
             </a>
+            <a href="{{ route('conoscenza.testate') }}" class="rounded-md border border-slate-300 px-3 py-1.5 font-medium text-slate-700 hover:bg-slate-100">
+                Testate
+            </a>
         </div>
     </div>
 
@@ -117,7 +120,12 @@
                             <p class="mt-0.5 text-xs text-slate-400">{{ $source->created_at->diffForHumans() }}</p>
                         </td>
 
-                        <td class="px-4 py-3 text-slate-500">{{ $source->type->label() }}</td>
+                        <td class="px-4 py-3 text-slate-500">
+                            {{ $source->type->label() }}
+                            @if ($source->origin->value !== 'manual')
+                                <span class="ml-1 inline-block rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-500">{{ $source->origin->label() }}</span>
+                            @endif
+                        </td>
 
                         <td class="px-4 py-3">
                             @php
@@ -136,6 +144,9 @@
                             @if ($source->error)
                                 <p class="mt-1 max-w-md text-xs text-red-600">{{ $source->error }}</p>
                             @endif
+                            @if ($source->queue_note)
+                                <p class="mt-1 max-w-md text-xs text-amber-600">{{ $source->queue_note }}</p>
+                            @endif
                         </td>
 
                         <td class="px-4 py-3 text-right tabular-nums text-slate-700">{{ $source->signals_count }}</td>
@@ -143,6 +154,9 @@
                         <td class="px-4 py-3 text-right whitespace-nowrap">
                             @if (in_array($source->status->value, ['failed', 'duplicate'], true))
                                 <button type="button" wire:click="retry({{ $source->id }})" class="text-xs font-medium text-slate-600 hover:text-slate-900 hover:underline">Riprova</button>
+                            @endif
+                            @if ($source->queue_note)
+                                <button type="button" wire:click="processAnyway({{ $source->id }})" class="text-xs font-medium text-slate-600 hover:text-slate-900 hover:underline">Processa comunque</button>
                             @endif
                             <button
                                 type="button"
