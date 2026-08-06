@@ -12,7 +12,7 @@ class AiHealthcheck extends Command
 {
     protected $signature = 'ai:healthcheck';
 
-    protected $description = 'Verifica i servizi da cui dipende la pipeline AI: claude CLI, Redis, Meilisearch, server MCP.';
+    protected $description = 'Verifica i servizi da cui dipende la pipeline AI: claude CLI, Redis, Horizon, Meilisearch, server MCP.';
 
     public function handle(SystemHealth $health): int
     {
