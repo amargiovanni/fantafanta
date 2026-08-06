@@ -294,7 +294,7 @@ class Room extends Component
             'me' => $state->myTeam(),
             'teams' => $this->teamsWithHotkeys($state),
             'results' => $this->results(),
-            'card' => $this->card($auction, $plan),
+            'card' => $this->card($auction, $plan, $state),
             'roles' => array_keys(LeagueConfig::DEFAULT_SLOTS),
         ]);
     }
@@ -351,7 +351,7 @@ class Room extends Component
      *
      * @return array<string, mixed>|null
      */
-    private function card(?Auction $auction, ?Plan $plan): ?array
+    private function card(?Auction $auction, ?Plan $plan, LeagueState $state): ?array
     {
         if ($this->selectedId === null) {
             return null;
@@ -378,7 +378,7 @@ class Room extends Component
             'player' => $player,
             'valuation' => $valuation,
             'max_bid' => (int) ($valuation->max_bid ?? 0),
-            'ceiling' => $this->myCeiling($auction),
+            'ceiling' => $this->myCeiling($state),
             'stats' => [
                 'fantamedia' => $stats['Fm'] ?? null,
                 'media_voto' => $stats['Mv'] ?? null,
@@ -396,10 +396,15 @@ class Room extends Component
      * ancora da riempire, più uno. Il motore lo applica già a `max_bid`; qui
      * si mostra accanto perché in asta si crede a un numero solo se si vede
      * da dove esce.
+     *
+     * Prende lo `$state` già caricato da `render()` invece di ricaricarlo:
+     * `LeagueState::load()` costa due query aggregate, e prima di questo fix
+     * girava due volte per richiesta ogni volta che una scheda era aperta
+     * (performance pass Fase 5).
      */
-    private function myCeiling(?Auction $auction): int
+    private function myCeiling(LeagueState $state): int
     {
-        $me = LeagueState::load($auction)->myTeam();
+        $me = $state->myTeam();
 
         return max(0, $me['credits_remaining'] - $me['open_slots_total'] + 1);
     }

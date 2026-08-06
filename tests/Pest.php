@@ -7,6 +7,7 @@ use App\Models\Team;
 use App\Models\Valuation;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 /*
@@ -162,6 +163,24 @@ function listonePerPiano(): Collection
             fvm: max(1, 300 - $i * 10),
         )),
     ]);
+}
+
+/**
+ * Conta le query eseguite dentro la closure (performance pass Fase 5): "niente
+ * N+1" si dimostra con un numero, non con un'impressione. Non tocca lo stato
+ * del query log fuori dalla closure: lo svuota prima e dopo.
+ */
+function contaQuery(Closure $callback): int
+{
+    DB::enableQueryLog();
+    DB::flushQueryLog();
+
+    $callback();
+
+    $numero = count(DB::getQueryLog());
+    DB::flushQueryLog();
+
+    return $numero;
 }
 
 /**
