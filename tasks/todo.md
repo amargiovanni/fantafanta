@@ -15,14 +15,14 @@ Regola: la fase N+1 non parte con acceptance della N aperti. Ogni fase chiude co
 - [x] Gate: acceptance Fase 0 del briefing §9 + test Pest su import/normalizzazione
 
 ## Fase 1 — Conoscenza
-- [ ] Migration + model: sources, signals, ai_runs, scrape_targets (seed testate)
-- [ ] Server MCP `fanta-asta` (laravel/mcp): tool read + save_signals + resolve_player_name, validazione server-side
-- [ ] Job RunClaudeTask (`claude -p`, timeout 300s, retry 1, audit ai_runs) + `.mcp.json`
-- [ ] Prompt `resources/prompts/extract-signals.md`
-- [ ] Backoffice ingestion: drop zone universale (pdf/link/testo/nota), lista sources con stato, coda needs_review, vista segnali per player con correzione manuale
-- [ ] Parsing PDF (smalot/pdfparser) e readability per link
-- [ ] `ai:healthcheck` (claude CLI + redis + meilisearch) + stato in dashboard
-- [ ] Gate: acceptance Fase 1 §9 (segnale da articolo, needs_review, superseded, ai_runs, PDF)
+- [x] Migration + model: sources, signals, ai_runs, scrape_targets (seed testate)
+- [x] Server MCP `fanta-asta` (laravel/mcp): tool read + save_signals + resolve_player_name, validazione server-side
+- [x] Job RunClaudeTask (`claude -p`, timeout 300s, retry 1, audit ai_runs) + `.mcp.json`
+- [x] Prompt `resources/prompts/extract-signals.md`
+- [x] Backoffice ingestion: drop zone universale (pdf/link/testo/nota), lista sources con stato, coda needs_review, vista segnali per player con correzione manuale
+- [x] Parsing PDF (smalot/pdfparser) e readability per link
+- [x] `ai:healthcheck` (claude CLI + redis + meilisearch) + stato in dashboard
+- [x] Gate: acceptance Fase 1 §9 (segnale da articolo, needs_review, superseded, ai_runs, PDF)
 
 ## Fase 2 — Cervello
 - [ ] ValuationEngine (PHP puro): base value, segnali, modificatori, inflazione, scarsità, vincolo budget; ricalcolo listone <10s

@@ -15,6 +15,7 @@
                 @php
                     $navItems = [
                         ['route' => 'dashboard', 'label' => 'Dashboard'],
+                        ['route' => 'conoscenza.index', 'label' => 'Conoscenza'],
                         ['route' => 'listone.index', 'label' => 'Listone'],
                         ['route' => 'listone.import', 'label' => 'Import'],
                         ['route' => 'lega.manage', 'label' => 'Lega'],

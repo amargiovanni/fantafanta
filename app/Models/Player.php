@@ -61,6 +61,14 @@ class Player extends Model
         $this->attributes['normalized_name'] = NameNormalizer::normalize($value);
     }
 
+    /**
+     * @return HasMany<Signal, $this>
+     */
+    public function signals(): HasMany
+    {
+        return $this->hasMany(Signal::class);
+    }
+
     public function searchableAs(): string
     {
         return 'players';
