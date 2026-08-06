@@ -83,6 +83,7 @@ it('costruisce il comando previsto dal contratto del briefing', function () {
             '--max-turns', '30',
             '--allowedTools', 'mcp__fanta-asta__*',
             '--mcp-config', '.mcp.json',
+            '--strict-mcp-config',
         ]);
 
         return true;

@@ -151,6 +151,12 @@ class RunClaudeTask implements ShouldQueue
             '--max-turns', (string) config('fanta.claude.max_turns'),
             '--allowedTools', (string) config('fanta.claude.allowed_tools'),
             '--mcp-config', (string) config('fanta.claude.mcp_config'),
+
+            // Solo il nostro server MCP. Senza questo il processo caricherebbe
+            // anche i server MCP personali dell'utente (e chiederebbe di
+            // approvare interattivamente quello di progetto, cosa impossibile
+            // in headless): il run deve vedere i dati di Fanta Asta e nient'altro.
+            '--strict-mcp-config',
         ];
     }
 
