@@ -2,13 +2,16 @@
 
 namespace App\Models;
 
+use App\Observers\LeagueConfigObserver;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Model;
 
 /**
  * Configurazione della lega. Tabella singleton: esiste sempre e solo la riga
  * id=1, ottenuta/creata tramite LeagueConfig::current().
  */
+#[ObservedBy(LeagueConfigObserver::class)]
 #[Fillable([
     'slots',
     'total_credits',
