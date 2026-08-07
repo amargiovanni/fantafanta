@@ -213,3 +213,80 @@ it('rispetta il tetto di estrazioni per giro, mettendo il resto in coda con nota
         ->and(Source::query()->whereNull('queue_note')->count())->toBe(20)
         ->and(Source::query()->whereNotNull('queue_note')->first()->status)->toBe(SourceStatus::Queued);
 });
+
+// Incidente reale del 2026-08-06: un full scrape su 12 testate ha accodato
+// oltre 400 estrazioni nonostante il tetto di 20. Il test 8 sopra gira sotto
+// il driver cache `array` di phpunit.xml, che auto-inizializza il contatore
+// al primo `Cache::increment` — questo nasconde il bug. In produzione
+// `CACHE_STORE=database` (.env): `Illuminate\Cache\DatabaseStore::increment`
+// ritorna `false`, SENZA creare la riga, quando la chiave non esiste ancora
+// — ed è sempre così al primo giro di un `runId` nuovo (un uuid per lo
+// schedulato, l'id del batch Horizon per il full scrape). Il tetto per
+// l'intero giro deve valere sommando le testate del batch, non testata per
+// testata: qui due testate condividono lo stesso runId, come fanno i job
+// `ScrapeTargetFull` dentro lo stesso batch (spec §Full scrape on demand).
+it('rispetta il tetto per l\'intero giro di un full scrape su più testate, sotto il cache store "database" di produzione', function () {
+    config([
+        'cache.default' => 'database',
+        'fanta.scraping.max_extractions_per_scrape' => 20,
+    ]);
+
+    $targetA = ScrapeTarget::factory()->create([
+        'url' => 'https://www.testata-a.it',
+        'rss_url' => 'https://www.testata-a.it/feed/',
+    ]);
+    $targetB = ScrapeTarget::factory()->create([
+        'url' => 'https://www.testata-b.it',
+        'rss_url' => 'https://www.testata-b.it/feed/',
+    ]);
+
+    // Titoli deliberatamente eterogenei (come nel test 8) per non innescare
+    // la dedup per titolo: 12 notizie per la testata A, 10 per la B, 22 in
+    // tutto — ben oltre il tetto di 20 per l'intero giro.
+    $soggetti = [
+        'Osimhen', 'Lautaro Martinez', 'Leao', 'Kvaratskhelia', 'Chiesa', 'Zaccagni', 'Barella',
+        'Retegui', 'Dybala', 'Kean', 'Vlahovic', 'Thuram', 'Calhanoglu', 'Di Lorenzo', 'Bastoni',
+        'Theo Hernandez', 'Pellegrini', 'Zielinski', 'Berardi', 'Immobile', 'Politano', 'Frattesi',
+    ];
+    $eventi = [
+        'salta la prossima per un problema muscolare', 'torna in gruppo dopo lo stop', 'in dubbio per un fastidio alla caviglia',
+        'squalificato per un turno dal giudice sportivo', 'rinnova il contratto fino al 2029', 'ballottaggio apertissimo per la maglia da titolare',
+        'ko per un risentimento al polpaccio', 'recupera e sarà convocato', 'nel mirino di un club di Premier League',
+        'positivo a un affaticamento, valutazioni in corso', 'pronto al rientro dal 1° minuto', 'si opera e salta il resto della stagione',
+        'convocato in nazionale nonostante l\'acciacco', 'obiettivo di mercato per gennaio', 'fuori lista per scelta tecnica',
+        'espulso nel finale, salterà il derby', 'vicino al ritorno dopo l\'intervento', 'stringe i denti e sarà in campo',
+        'lascia il ritiro per motivi familiari', 'sotto osservazione per un problema al ginocchio', 'via libera dello staff medico per la ripresa',
+        'nuovo like sospetto sui social, mercato in fermento',
+    ];
+
+    $itemsFor = fn (string $host, array $indices) => collect($indices)->map(fn (int $i) => [
+        'title' => "{$soggetti[$i]}, {$eventi[$i]}",
+        'url' => "https://www.{$host}/notizia-{$i}",
+        'pubDate' => now()->toRfc2822String(),
+    ])->all();
+
+    Http::fake([
+        $targetA->rss_url => Http::response(rssFeed($itemsFor('testata-a.it', range(0, 11)))),
+        $targetB->rss_url => Http::response(rssFeed($itemsFor('testata-b.it', range(12, 21)))),
+    ]);
+
+    // L'id del batch Horizon condiviso fra i job del full scrape (spec §Full
+    // scrape on demand): stesso runId per entrambe le testate.
+    $runId = (string) Str::uuid();
+    $runner = app(ScrapeRunner::class);
+
+    $resultA = $runner->runFull($targetA, $runId);
+    $resultB = $runner->runFull($targetB, $runId);
+
+    expect($resultA->created)->toBe(12)
+        ->and($resultB->created)->toBe(10)
+        ->and(Source::query()->count())->toBe(22);
+
+    // Il tetto vale per l'INTERO giro (le due testate insieme), non 20 a testa.
+    Bus::assertDispatchedTimes(ProcessSource::class, 20);
+
+    expect(Source::query()->whereNotNull('queue_note')->count())->toBe(2)
+        ->and(Source::query()->whereNull('queue_note')->count())->toBe(20)
+        ->and(Source::query()->whereNotNull('queue_note')->get()->pluck('status')->unique()->all())
+        ->toBe([SourceStatus::Queued]);
+});

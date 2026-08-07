@@ -111,7 +111,11 @@ class Dashboard extends Component
                 'today' => now()->toDateString(),
                 'auction_id' => $auction->id,
             ],
-            queue: 'ai',
+            // Lavoro interattivo (l'utente aspetta la risposta): va sulla
+            // stessa coda prioritaria del replan, non sulla coda 'ai' bulk
+            // dello scraping — dove è rimasto affamato dietro al backlog di
+            // un full scrape per 45+ minuti (incidente 2026-08-06).
+            queue: (string) config('fanta.replan.queue'),
         );
 
         session()->flash('dashboard', 'Generazione del piano avviata: comparirà qui appena pronta.');
