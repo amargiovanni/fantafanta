@@ -2,7 +2,7 @@
     <div>
         <h1 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">Import listone</h1>
         <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Carica il CSV "Quotazioni" di fantacalcio.it. Il mapping delle colonne va confermato ad ogni import: il formato può cambiare stagione per stagione.
+            Carica il listone ufficiale (.xlsx) esportato da fantacalcio.it, sezione "Quotazioni" (è supportato anche il vecchio formato .csv). Il mapping delle colonne va confermato ad ogni import: il formato può cambiare stagione per stagione.
         </p>
     </div>
 
@@ -18,14 +18,14 @@
         <div class="rounded-lg border border-dashed border-slate-300 bg-white px-4 py-6 text-center dark:border-slate-700 dark:bg-slate-900">
             <p class="text-sm font-medium text-slate-700 dark:text-slate-300">Il listone è ancora vuoto.</p>
             <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                Scegli il CSV "Quotazioni" esportato da fantacalcio.it qui sotto: dopo la scelta comparirà l'anteprima delle colonne da confermare.
+                Scegli il file "Quotazioni" (.xlsx, o .csv per il vecchio formato) esportato da fantacalcio.it qui sotto: dopo la scelta comparirà l'anteprima delle colonne da confermare.
             </p>
         </div>
     @endif
 
     <div class="rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
-        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">File CSV</label>
-        <input type="file" wire:model="file" accept=".csv,.txt" class="mt-2 block w-full text-sm dark:text-slate-300">
+        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">File del listone (.xlsx o .csv)</label>
+        <input type="file" wire:model="file" accept=".xlsx,.csv,.txt" class="mt-2 block w-full text-sm dark:text-slate-300">
         @error('file') <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
         <div wire:loading wire:target="file" class="mt-2 text-sm text-slate-500 dark:text-slate-400">Lettura del file in corso...</div>
     </div>
@@ -92,14 +92,24 @@
                 </table>
             </div>
 
-            <button
-                type="button"
-                wire:click="confirmImport"
-                wire:loading.attr="disabled"
-                class="mt-4 rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-300"
-            >
-                Conferma import
-            </button>
+            <div class="mt-4 flex items-center gap-3">
+                <button
+                    type="button"
+                    wire:click="confirmImport"
+                    wire:loading.attr="disabled"
+                    class="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-300"
+                >
+                    Conferma import
+                </button>
+                <button
+                    type="button"
+                    wire:click="cancelImport"
+                    wire:loading.attr="disabled"
+                    class="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                >
+                    Annulla
+                </button>
+            </div>
         </div>
     @endif
 </div>
