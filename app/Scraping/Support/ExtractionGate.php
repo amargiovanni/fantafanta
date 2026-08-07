@@ -14,9 +14,19 @@ use Illuminate\Support\Facades\Cache;
  * che job concorrenti sullo stesso giro — i job del full scrape girano uno
  * per testata, potenzialmente in parallelo — condividano lo stesso tetto.
  *
- * `Cache::increment` è atomico sul driver Redis (usato in produzione), che è
- * ciò che rende sicura la concorrenza fra i job del batch; sul driver array
- * dei test non c'è concorrenza reale quindi la garanzia non serve.
+ * `Cache::increment` è atomico sul driver Redis: una chiave assente parte da
+ * 0 e l'INCR la crea, tutto in un colpo. NON è così su tutti i driver: il
+ * driver `database` (quello effettivamente in produzione, vedi CACHE_STORE
+ * in .env) fa un semplice UPDATE sulla riga esistente e ritorna `false`
+ * SENZA crearla se la chiave non c'è ancora — e la chiave del gate è sempre
+ * nuova a inizio giro (un uuid per lo schedulato, l'id del batch Horizon per
+ * il full scrape). Senza il seed esplicito qui sotto, `tryAcquire` autorizza
+ * sempre (`false <= cap()` è vero in PHP): è la causa radice dell'incidente
+ * del 2026-08-06, dove il tetto non ha retto su un full scrape (130 run
+ * reali di Claude eseguiti prima dell'intervento manuale). `Cache::add` seeda
+ * la chiave con un INSERT ... IGNORE atomico anche sul driver `database`
+ * (unique index su `key`), quindi resta sicuro con più job del batch che
+ * chiamano `tryAcquire` in concorrenza sullo stesso runId.
  */
 class ExtractionGate
 {
@@ -27,16 +37,14 @@ class ExtractionGate
     public function tryAcquire(string $runId): bool
     {
         $key = $this->key($runId);
+
+        // Seed idempotente e atomico: non sovrascrive se un altro job del
+        // batch l'ha già creata (o incrementata) nel frattempo.
+        Cache::add($key, 0, now()->addHours(6));
+
         $count = Cache::increment($key);
 
-        if ($count === 1) {
-            // Solo il primo incremento imposta la scadenza: rileggere il
-            // valore adesso e riscriverlo con TTL non perde nessun conteggio,
-            // nel peggiore dei casi allunga di poco la vita della chiave.
-            Cache::put($key, $count, now()->addHours(6));
-        }
-
-        return $count <= $this->cap();
+        return $count !== false && $count <= $this->cap();
     }
 
     public function count(string $runId): int
