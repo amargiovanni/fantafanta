@@ -164,9 +164,26 @@ class ListoneImporter
                 $touchedNormalizedNames[] = $normalizedName;
             }
 
-            $summary['removed'] = Player::whereNotIn('normalized_name', $touchedNormalizedNames)
+            // I giocatori da rimuovere si recuperano PRIMA dell'update bulk:
+            // un update via query builder non fa scattare l'evento Eloquent
+            // `saved` da cui dipende Scout per la risincronizzazione, quindi
+            // resterebbero cercabili nell'indice (Meilisearch) anche dopo
+            // essere stati marcati `removed` in DB. Si aggiorna lo stato con
+            // una singola query (invariato, resta economico), poi si
+            // desincronizzano esplicitamente dal motore di ricerca i
+            // modelli già recuperati.
+            $toRemove = Player::whereNotIn('normalized_name', $touchedNormalizedNames)
                 ->where('status', '!=', PlayerStatus::Removed->value)
-                ->update(['status' => PlayerStatus::Removed->value]);
+                ->get();
+
+            if ($toRemove->isNotEmpty()) {
+                Player::whereIn('id', $toRemove->pluck('id'))
+                    ->update(['status' => PlayerStatus::Removed->value]);
+
+                $toRemove->unsearchable();
+            }
+
+            $summary['removed'] = $toRemove->count();
         });
 
         // Il listone è cambiato: quotazioni, FVM e statistiche sono gli input
