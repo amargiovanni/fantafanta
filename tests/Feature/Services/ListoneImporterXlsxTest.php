@@ -4,6 +4,7 @@ use App\Enums\PlayerRole;
 use App\Enums\PlayerStatus;
 use App\Models\Player;
 use App\Services\ListoneImporter;
+use App\Services\PlayerSearch;
 
 function realListoneXlsxFixturePath(): string
 {
@@ -53,6 +54,50 @@ it('imports every real player from the official xlsx listone with correct role c
         ->and(Player::where('role', PlayerRole::Difensore)->count())->toBe(175)
         ->and(Player::where('role', PlayerRole::Centrocampista)->count())->toBe(173)
         ->and(Player::where('role', PlayerRole::Attaccante)->count())->toBe(85);
+});
+
+it('generates "surname" and "surname+initial" aliases for every real name abbreviated with a dot', function () {
+    // Solo 80 dei 493 nomi reali portano un'iniziale puntata ("Martinez Jo.",
+    // "Martinez L."...): gli altri 413 sono nomi singoli o composti senza
+    // punto ("Svilar", "Di Lorenzo") e non generano alias, perché non c'è
+    // nulla da disambiguare. Il totale (171) è calcolato deterministicamente
+    // dal file reale, non stimato: verificato separatamente estraendo a mano
+    // i 493 valori "Nome" dal foglio e rieseguendo la stessa logica di
+    // generateAliases() al di fuori del framework.
+    $summary = (new ListoneImporter)->import(realListoneXlsxFixturePath(), realListoneMapping(), format: 'xlsx');
+
+    expect($summary['aliases_created'])->toBe(171);
+
+    $martinezJo = Player::where('normalized_name', 'martinez jo')->firstOrFail();
+    $martinezL = Player::where('normalized_name', 'martinez l')->firstOrFail();
+
+    // "Martinez Jo.": l'iniziale abbreviata è multi-lettera ("Jo"), quindi
+    // "cognome+iniziale" ("martinez j") resta distinto dal nome proprio
+    // ("martinez jo") e sopravvive al filtro anti-duplicato: 3 alias.
+    expect($martinezJo->aliases()->pluck('normalized_alias')->sort()->values()->all())
+        ->toBe(['jo martinez', 'martinez', 'martinez j']);
+
+    // "Martinez L.": l'iniziale abbreviata è già una sola lettera, quindi
+    // "cognome+iniziale" ("martinez l") COINCIDE col nome proprio e viene
+    // scartato dal filtro anti-duplicato (stessa regola già in uso per il
+    // formato storico, es. "Thuram K." -> solo alias "thuram"): 2 alias.
+    expect($martinezL->aliases()->pluck('normalized_alias')->sort()->values()->all())
+        ->toBe(['l martinez', 'martinez']);
+});
+
+it('resolves "martinez" to both real homonyms and "di lorenzo"/"svilar" directly by name', function () {
+    (new ListoneImporter)->import(realListoneXlsxFixturePath(), realListoneMapping(), format: 'xlsx');
+
+    $search = app(PlayerSearch::class);
+
+    $martinez = $search->search('martinez', 10);
+    expect($martinez->pluck('player.normalized_name'))->toContain('martinez jo', 'martinez l');
+
+    $diLorenzo = $search->search('di lorenzo', 10);
+    expect($diLorenzo->pluck('player.normalized_name'))->toContain('di lorenzo');
+
+    $svilar = $search->search('svilar', 10);
+    expect($svilar->pluck('player.normalized_name'))->toContain('svilar');
 });
 
 it('reads the fantacalcio.it id into the mapped season_stats when mapped', function () {
