@@ -20,6 +20,12 @@ use Illuminate\Database\Seeder;
  * (verificato "vivo" il 2026-08-06) risponde 200 ma il contenuto è fermo al
  * 14 novembre 2023: un feed morto che mente sullo status code. Azzerato:
  * il fallback HtmlListParser copre la sezione Serie A.
+ *
+ * Nuove testate verificate VIVE dal PO il 2026-08-07: ANSA — Calcio,
+ * Tuttosport — Serie A, Alfredo Pedullà, StadioSport (tutte con feed RSS
+ * risponde 200). Nella stessa verifica è emerso anche il feed RSS del
+ * Corriere dello Sport — Fantacalcio (mancante finora, dove sotto era
+ * `null`): valorizzato.
  */
 class ScrapeTargetSeeder extends Seeder
 {
@@ -72,7 +78,28 @@ class ScrapeTargetSeeder extends Seeder
             [
                 'name' => 'Corriere dello Sport — Fantacalcio',
                 'url' => 'https://www.corrieredellosport.it/fantacalcio',
-                'rss_url' => null,
+                // Verificato vivo il 2026-08-07: risponde 200, XML valido.
+                'rss_url' => 'https://www.corrieredellosport.it/rss/fantacalcio',
+            ],
+            [
+                'name' => 'ANSA — Calcio',
+                'url' => 'https://www.ansa.it/sito/notizie/sport/calcio/',
+                'rss_url' => 'https://www.ansa.it/sito/notizie/sport/calcio/calcio_rss.xml',
+            ],
+            [
+                'name' => 'Tuttosport — Serie A',
+                'url' => 'https://www.tuttosport.com/calcio/serie-a',
+                'rss_url' => 'https://www.tuttosport.com/rss/calcio/serie-a',
+            ],
+            [
+                'name' => 'Alfredo Pedullà',
+                'url' => 'https://www.alfredopedulla.com',
+                'rss_url' => 'https://www.alfredopedulla.com/feed/',
+            ],
+            [
+                'name' => 'StadioSport',
+                'url' => 'https://www.stadiosport.it',
+                'rss_url' => 'https://www.stadiosport.it/feed/',
             ],
         ];
 
