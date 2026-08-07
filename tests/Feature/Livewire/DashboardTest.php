@@ -94,7 +94,14 @@ it('non apre due sessioni d\'asta', function () {
     expect(Auction::query()->count())->toBe(1);
 });
 
-it('mette in coda la generazione del piano sulla coda ai, senza chiamare l\'AI adesso', function () {
+// Incidente reale del 2026-08-06: il bottone "Genera piano" è rimasto
+// affamato dietro al backlog della coda 'ai' per 45+ minuti perché il suo
+// lavoro — interattivo, l'utente aspetta la risposta — condivideva la coda
+// bulk dello scraping invece della coda prioritaria 'ai-replan' (stesso
+// lavoro del replan, che infatti non ha sofferto: vedi Replanner::launch,
+// che usa già config('fanta.replan.queue')). config/horizon.php conferma la
+// priorità: soglia d'attesa 30s su 'ai-replan' contro 300s su 'ai'.
+it('mette in coda la generazione del piano sulla coda prioritaria ai-replan, senza chiamare l\'AI adesso', function () {
     Queue::fake();
 
     configuraLega();
@@ -114,7 +121,8 @@ it('mette in coda la generazione del piano sulla coda ai, senza chiamare l\'AI a
     Queue::assertPushed(RunClaudeTask::class, fn (RunClaudeTask $job) => $job->task === 'generate-plan'
         && $job->promptFile === 'generate-plan.md'
         && $job->context === ['auction_id' => $auction->id, 'plan_id' => $plan->id]
-        && $job->queue === 'ai');
+        && $job->queue === config('fanta.replan.queue')
+        && $job->queue === 'ai-replan');
 });
 
 it('rifiuta di generare un piano senza asta o senza listone', function () {
