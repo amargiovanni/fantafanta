@@ -6,13 +6,25 @@ use App\Enums\PlayerRole;
 use App\Models\Player;
 use App\Services\ListoneImporter;
 use Illuminate\Contracts\View\View;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Livewire\Component;
 use Livewire\WithFileUploads;
 
 /**
- * Import del listone CSV fantacalcio.it. Il mapping colonna → campo è
- * sempre confermato dall'utente prima dell'import (§10 dei rischi: il
- * formato del CSV può cambiare), con anteprima delle prime righe.
+ * Import del listone fantacalcio.it. Formato ufficiale: .xlsx (export
+ * "Quotazioni" di fantacalcio.it); .csv resta supportato per
+ * retrocompatibilità. Il mapping colonna → campo è sempre confermato
+ * dall'utente prima dell'import (§10 dei rischi: il formato può cambiare),
+ * con anteprima delle prime righe.
+ *
+ * Il file XLSX è binario: non viene tenuto in una proprietà Livewire come
+ * stringa (costoso da serializzare/deserializzare tra un giro e l'altro del
+ * wizard), ma salvato su disco (`storage/app/private/imports`, disco
+ * `local`) e se ne tiene solo il path tra i passi. Il CSV, testuale e già
+ * piccolo, resta invece tenuto in memoria come prima. Il file salvato viene
+ * ripulito sia a import concluso che se l'utente annulla o carica un nuovo
+ * file al posto del precedente.
  */
 class Import extends Component
 {
@@ -20,8 +32,14 @@ class Import extends Component
 
     public $file = null;
 
+    /** Formato del file caricato: 'csv' oppure 'xlsx'. */
+    public ?string $format = null;
+
     /** Contenuto grezzo del CSV caricato, tenuto in memoria tra un passo e l'altro del wizard. */
     public string $csvContent = '';
+
+    /** Path (relativo al disco `local`) del file XLSX caricato, tenuto tra un passo e l'altro del wizard. */
+    public ?string $xlsxStoragePath = null;
 
     /** @var array<int, string> */
     public array $headers = [];
@@ -46,12 +64,29 @@ class Import extends Component
 
     public function updatedFile(): void
     {
-        $this->validate(['file' => ['required', 'file', 'extensions:csv,txt', 'max:5120']]);
+        $this->validate(['file' => ['required', 'file', 'extensions:xlsx,csv,txt', 'max:10240']]);
 
         $this->summary = null;
-        $this->csvContent = $this->file->get();
+        $this->cleanupStoredXlsx();
 
-        $preview = app(ListoneImporter::class)->preview($this->csvContent);
+        $extension = mb_strtolower((string) $this->file->getClientOriginalExtension());
+
+        if ($extension === 'xlsx') {
+            $this->format = 'xlsx';
+            $this->csvContent = '';
+            $this->xlsxStoragePath = $this->file->storeAs('imports', Str::uuid()->toString().'.xlsx', 'local');
+
+            $preview = app(ListoneImporter::class)->preview(
+                Storage::disk('local')->path($this->xlsxStoragePath),
+                format: 'xlsx'
+            );
+        } else {
+            $this->format = 'csv';
+            $this->xlsxStoragePath = null;
+            $this->csvContent = $this->file->get();
+
+            $preview = app(ListoneImporter::class)->preview($this->csvContent);
+        }
 
         $this->headers = $preview['headers'];
         $this->previewRows = $preview['rows'];
@@ -75,12 +110,41 @@ class Import extends Component
             'mapping.fvm' => 'colonna FVM',
         ]);
 
-        $this->summary = app(ListoneImporter::class)->import($this->csvContent, [
+        $source = $this->format === 'xlsx'
+            ? Storage::disk('local')->path($this->xlsxStoragePath)
+            : $this->csvContent;
+
+        $this->summary = app(ListoneImporter::class)->import($source, [
             ...$this->mapping,
             'stats' => $this->statsColumns,
-        ]);
+        ], $this->format ?? 'csv');
 
-        $this->reset(['file', 'csvContent', 'headers', 'previewRows', 'statsColumns']);
+        $this->cleanupStoredXlsx();
+        $this->reset(['file', 'csvContent', 'xlsxStoragePath', 'format', 'headers', 'previewRows', 'statsColumns']);
+    }
+
+    /**
+     * Annulla il wizard prima della conferma, ripulendo l'eventuale file
+     * XLSX temporaneo già salvato su disco.
+     */
+    public function cancelImport(): void
+    {
+        $this->cleanupStoredXlsx();
+        $this->reset(['file', 'csvContent', 'xlsxStoragePath', 'format', 'headers', 'previewRows', 'statsColumns']);
+        $this->mapping = [
+            'name' => '',
+            'role' => '',
+            'real_team' => '',
+            'quotazione' => '',
+            'fvm' => '',
+        ];
+    }
+
+    private function cleanupStoredXlsx(): void
+    {
+        if ($this->xlsxStoragePath !== null && Storage::disk('local')->exists($this->xlsxStoragePath)) {
+            Storage::disk('local')->delete($this->xlsxStoragePath);
+        }
     }
 
     public function render(): View

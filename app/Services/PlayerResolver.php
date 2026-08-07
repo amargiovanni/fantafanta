@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Player;
 use App\Models\PlayerAlias;
+use App\Support\FantacalcioNameParser;
 use App\Support\NameNormalizer;
 use App\Support\NameSimilarity;
 use Illuminate\Database\Eloquent\Builder;
@@ -102,8 +103,10 @@ class PlayerResolver
             ->whereIn('id', $ids->all())
             ->get();
 
+        $queryTokens = collect(explode(' ', $normalizedName))->filter()->values()->all();
+
         return $players
-            ->map(function (Player $player) use ($normalizedName) {
+            ->map(function (Player $player) use ($normalizedName, $queryTokens) {
                 $forms = $player->aliases->pluck('normalized_alias')
                     ->push($player->normalized_name)
                     ->filter()
@@ -113,17 +116,79 @@ class PlayerResolver
                     ->map(fn (string $form) => NameSimilarity::score($normalizedName, $form))
                     ->max() ?? 0.0;
 
+                $similarity = self::applyDottedInitialAgreement($player, $queryTokens, (float) $similarity);
+
                 return [
                     'player_id' => $player->id,
                     'name' => $player->name,
                     'role' => $player->role->value,
                     'real_team' => $player->real_team,
-                    'similarity' => round((float) $similarity, 4),
+                    'similarity' => round($similarity, 4),
                 ];
             })
             ->sortByDesc('similarity')
             ->values()
             ->all();
+    }
+
+    /**
+     * Rischio n.1 del progetto: due omonimi condividono lo stesso alias-solo-
+     * cognome generato dall'import (es. "martinez" per "Martinez Jo." e
+     * "Martinez L."), quindi qualunque query che contenga il cognome pareggia
+     * sempre a similarity=1.0 su entrambi — un nome completo citato da una
+     * fonte ("Lautaro Martinez") non li distinguerebbe mai, restando
+     * permanentemente ambiguo anche quando l'informazione per scegliere c'è
+     * davvero (l'iniziale del nome proprio).
+     *
+     * Si applica SOLO ai candidati il cui nome proprio è un'abbreviazione
+     * puntata nel formato reale fantacalcio.it (es. "Martinez Jo.", "Martinez
+     * L."): un token che finisce con "." in $player->name, non un nome
+     * proprio completo come "MARTINEZ Lautaro" del vecchio formato CSV (per
+     * cui la regola non scatta, zero impatto sui casi già esistenti).
+     *
+     * Quando il cognome del candidato compare nella query insieme a un altro
+     * token:
+     *  - quel token ha per prefisso l'iniziale del candidato ("l" per
+     *    "lautaro", "jo" per "joaquin") -> conferma forte, sopra soglia;
+     *  - altrimenti -> contraddizione, il candidato non può essere quello
+     *    giusto: penalizzato sotto la fascia di ambiguità.
+     * Una query di solo cognome ("Martinez") non ha nessun token extra da
+     * verificare: nessun aggiustamento, resta ambiguo com'è giusto che sia.
+     *
+     * @param  array<int, string>  $queryTokens
+     */
+    private static function applyDottedInitialAgreement(Player $player, array $queryTokens, float $similarity): float
+    {
+        $parsed = FantacalcioNameParser::parse($player->name);
+
+        if ($parsed['given'] === '' || ! str_ends_with($parsed['given'], '.')) {
+            return $similarity;
+        }
+
+        $surnameTokens = collect(explode(' ', NameNormalizer::normalize($parsed['surname'])))->filter()->values();
+
+        if ($surnameTokens->isEmpty() || $surnameTokens->diff($queryTokens)->isNotEmpty()) {
+            return $similarity;
+        }
+
+        $extraTokens = collect($queryTokens)->diff($surnameTokens)->values();
+
+        if ($extraTokens->isEmpty()) {
+            return $similarity;
+        }
+
+        $initialForms = collect([
+            mb_strtolower((string) $parsed['given_initial'], 'UTF-8'),
+            NameNormalizer::normalize($parsed['given']),
+        ])->filter()->unique();
+
+        $confirmed = $extraTokens->contains(
+            fn (string $token) => $initialForms->contains(fn (string $initial) => str_starts_with($token, $initial))
+        );
+
+        return $confirmed
+            ? max($similarity, 0.95)
+            : min($similarity, 0.4);
     }
 
     /**

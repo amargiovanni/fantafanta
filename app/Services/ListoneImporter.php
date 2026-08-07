@@ -9,15 +9,22 @@ use App\Models\Player;
 use App\Models\PlayerAlias;
 use App\Support\FantacalcioNameParser;
 use App\Support\NameNormalizer;
+use App\Support\XlsxReader;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
 /**
- * Importa il listone quotazioni fantacalcio.it.
+ * Importa il listone quotazioni fantacalcio.it, in formato CSV o XLSX (il
+ * formato ufficiale esportato da fantacalcio.it è XLSX; il CSV resta
+ * supportato per retrocompatibilità).
  *
  * Formato reale: la prima riga è un'intestazione generica (titolo/versione),
  * sempre da scartare; la seconda riga sono i veri header colonna
  * (Id,R,RM,Nome,Squadra,Qt.A,Qt.I,Diff,Qt.A M,Qt.I M,Diff M,FVM,FVM M,...).
+ * Questa convenzione (scarta riga 1, riga 2 = header, mapping configurabile)
+ * è identica per entrambi i formati e condivisa da {@see buildRows()}.
+ * Nel caso XLSX, il listone completo si trova nel foglio "Tutti" (il
+ * workbook reale ha anche fogli per ruolo e un foglio "Ceduti", esclusi).
  * Il mapping colonna → campo è passato dal chiamante (tipicamente la UI
  * Livewire, dopo l'anteprima) perché fantacalcio.it può cambiare il formato
  * (§10 dei rischi noti).
@@ -26,15 +33,20 @@ class ListoneImporter
 {
     private const REQUIRED_MAPPING_KEYS = ['name', 'role', 'real_team', 'quotazione', 'fvm'];
 
+    private const LISTONE_SHEET_NAME = 'Tutti';
+
     /**
-     * Legge l'intestazione reale del CSV (dopo aver scartato la prima riga
-     * generica) e le prime $limit righe di dati, per l'anteprima di mapping.
+     * Legge l'intestazione reale del listone (dopo aver scartato la prima
+     * riga generica) e le prime $limit righe di dati, per l'anteprima di
+     * mapping.
      *
+     * @param  string  $source  contenuto del CSV, oppure path del file XLSX se $format === 'xlsx'
+     * @param  'csv'|'xlsx'  $format
      * @return array{headers: array<int, string>, rows: array<int, array<string, string>>, suggested_mapping: array<string, string>}
      */
-    public function preview(string $csvContent, int $limit = 5): array
+    public function preview(string $source, int $limit = 5, string $format = 'csv'): array
     {
-        $parsed = $this->parseCsv($csvContent);
+        $parsed = $this->parseSource($source, $format);
         $rows = array_slice($parsed['rows'], 0, $limit);
 
         return [
@@ -82,14 +94,16 @@ class ListoneImporter
      * stesso CSV aggiorna quotazioni/fvm/stats senza toccare gli alias
      * esistenti né duplicare nulla.
      *
+     * @param  string  $source  contenuto del CSV, oppure path del file XLSX se $format === 'xlsx'
      * @param  array<string, mixed>  $mapping  ['name'=>'Nome','role'=>'R','real_team'=>'Squadra','quotazione'=>'Qt.A','fvm'=>'FVM','stats'=>['Pv','Mv',...]]
+     * @param  'csv'|'xlsx'  $format
      * @return array{created: int, updated: int, removed: int, skipped: int, aliases_created: int}
      */
-    public function import(string $csvContent, array $mapping): array
+    public function import(string $source, array $mapping, string $format = 'csv'): array
     {
         $this->assertMappingIsComplete($mapping);
 
-        $parsed = $this->parseCsv($csvContent);
+        $parsed = $this->parseSource($source, $format);
         $statsColumns = $mapping['stats'] ?? [];
 
         $summary = ['created' => 0, 'updated' => 0, 'removed' => 0, 'skipped' => 0, 'aliases_created' => 0];
@@ -150,9 +164,26 @@ class ListoneImporter
                 $touchedNormalizedNames[] = $normalizedName;
             }
 
-            $summary['removed'] = Player::whereNotIn('normalized_name', $touchedNormalizedNames)
+            // I giocatori da rimuovere si recuperano PRIMA dell'update bulk:
+            // un update via query builder non fa scattare l'evento Eloquent
+            // `saved` da cui dipende Scout per la risincronizzazione, quindi
+            // resterebbero cercabili nell'indice (Meilisearch) anche dopo
+            // essere stati marcati `removed` in DB. Si aggiorna lo stato con
+            // una singola query (invariato, resta economico), poi si
+            // desincronizzano esplicitamente dal motore di ricerca i
+            // modelli già recuperati.
+            $toRemove = Player::whereNotIn('normalized_name', $touchedNormalizedNames)
                 ->where('status', '!=', PlayerStatus::Removed->value)
-                ->update(['status' => PlayerStatus::Removed->value]);
+                ->get();
+
+            if ($toRemove->isNotEmpty()) {
+                Player::whereIn('id', $toRemove->pluck('id'))
+                    ->update(['status' => PlayerStatus::Removed->value]);
+
+                $toRemove->unsearchable();
+            }
+
+            $summary['removed'] = $toRemove->count();
         });
 
         // Il listone è cambiato: quotazioni, FVM e statistiche sono gli input
@@ -214,6 +245,19 @@ class ListoneImporter
     }
 
     /**
+     * @param  'csv'|'xlsx'  $format
+     * @return array{headers: array<int, string>, rows: array<int, array<string, string>>}
+     */
+    private function parseSource(string $source, string $format): array
+    {
+        return match ($format) {
+            'csv' => $this->parseCsv($source),
+            'xlsx' => $this->parseXlsx($source),
+            default => throw new InvalidArgumentException("Formato listone non supportato: {$format}"),
+        };
+    }
+
+    /**
      * @return array{headers: array<int, string>, rows: array<int, array<string, string>>}
      */
     private function parseCsv(string $csvContent): array
@@ -234,8 +278,57 @@ class ListoneImporter
         }
         $headers = array_map(fn ($header) => trim((string) $header), $headers);
 
-        $rows = [];
+        $lines = [];
         while (($line = fgetcsv($stream, null, ',', '"', '')) !== false) {
+            $lines[] = $line;
+        }
+
+        fclose($stream);
+
+        return ['headers' => $headers, 'rows' => $this->buildRows($headers, $lines)];
+    }
+
+    /**
+     * Legge il foglio "Tutti" del listone XLSX ufficiale fantacalcio.it.
+     * Stessa convenzione del CSV: riga 1 generica scartata, riga 2 = header.
+     *
+     * @return array{headers: array<int, string>, rows: array<int, array<string, string>>}
+     */
+    private function parseXlsx(string $path): array
+    {
+        $grid = (new XlsxReader($path))->readSheet(self::LISTONE_SHEET_NAME);
+
+        if ($grid === []) {
+            return ['headers' => [], 'rows' => []];
+        }
+
+        // Riga 1: intestazione generica di fantacalcio.it (titolo/versione), sempre scartata.
+        array_shift($grid);
+
+        $headerLine = array_shift($grid);
+        if ($headerLine === null) {
+            return ['headers' => [], 'rows' => []];
+        }
+        $headers = array_map(fn ($header) => trim((string) $header), $headerLine);
+
+        return ['headers' => $headers, 'rows' => $this->buildRows($headers, $grid)];
+    }
+
+    /**
+     * Trasforma righe grezze (array indicizzato per posizione colonna) in
+     * righe associative header => valore, condiviso da CSV e XLSX. Scarta le
+     * righe completamente vuote (convenzione fgetcsv per una riga CSV vuota:
+     * un singolo elemento null).
+     *
+     * @param  array<int, string>  $headers
+     * @param  iterable<int, array<int, string|null>>  $lines
+     * @return array<int, array<string, string>>
+     */
+    private function buildRows(array $headers, iterable $lines): array
+    {
+        $rows = [];
+
+        foreach ($lines as $line) {
             if ($line === [null]) {
                 continue;
             }
@@ -247,8 +340,6 @@ class ListoneImporter
             $rows[] = $row;
         }
 
-        fclose($stream);
-
-        return ['headers' => $headers, 'rows' => $rows];
+        return $rows;
     }
 }
